@@ -67,8 +67,7 @@ Write a JSON proposal to a temporary file:
         "text": "The session decided to keep the CLI primitive-focused and put workflows in coding-agent skills.",
         "truth": "source_verified",
         "intent": "intended",
-        "about": [],
-        "evidenced_by": ["source.current_session"]
+        "about": []
       }
     ],
     "sources": [
@@ -79,7 +78,16 @@ Write a JSON proposal to a temporary file:
         "title": "Current coding-agent session"
       }
     ],
-    "edges": []
+    "edges": [
+      {
+        "kind": "evidenced_by",
+        "from": "claim.example_session_decision",
+        "to": "source.current_session",
+        "metadata": {
+          "reason": "The decision was discussed and agreed during the current coding-agent session."
+        }
+      }
+    ]
   }
 }
 ```
@@ -87,6 +95,7 @@ Write a JSON proposal to a temporary file:
 Allowed claim kinds: `fact`, `requirement`, `decision`, `task`, `question`, `risk`.
 Allowed truth values: `code_verified`, `source_verified`, `unknown`.
 Allowed intent values: `intended`, `accidental`, `unknown`.
+Allowed source kinds: `session`.
 
 Use compact relationship fields where possible:
 
@@ -94,10 +103,11 @@ Use compact relationship fields where possible:
 - `component.contains[]` for Component -> Component.
 - `flow.contains[]` for Flow -> Flow.
 - `claim.about[]` for Claim -> Component/Flow.
-- `claim.evidenced_by[]` for Claim -> Source.
 - `claim.supersedes[]`, `component.supersedes[]`, or `flow.supersedes[]` only when replacing known existing memory.
 
-If you create a session source, connect source-backed claims with `evidenced_by`.
+For source-backed claims, use explicit `edges[]` entries with `kind: "evidenced_by"` and `metadata.reason`. Do not use compact `claim.evidenced_by[]`; every evidence edge must explain why the session supports the claim.
+
+If you create a session source, connect non-code session-derived claims with `evidenced_by` edges. Code-verified claims do not need session evidence unless the claim is also recording a session decision, requirement, question, risk, trade-off, or task.
 
 ## Quality Bar
 
@@ -105,8 +115,10 @@ If you create a session source, connect source-backed claims with `evidenced_by`
 - Reuse existing components/flows when `greplica graph context` finds them.
 - Create new components/flows only when the session introduced or clarified a durable area.
 - Use `code_verified` only for claims checked against code.
-- Use `source_verified` for claims grounded in the session or external artifacts.
+- Use `source_verified` for claims grounded in the session.
 - Use `unknown` for unresolved tasks, questions, and risks.
+- Create one `session` source for the current session when storing session-derived claims.
+- Add a concise free-text `metadata.reason` to each `evidenced_by` edge.
 
 ## Validate And Apply
 

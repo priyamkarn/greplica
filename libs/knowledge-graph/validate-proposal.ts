@@ -6,7 +6,7 @@ import type { GraphObjectType } from "./schema.js";
 const claimKinds = new Set(["fact", "requirement", "decision", "task", "question", "risk"]);
 const claimTruths = new Set(["code_verified", "source_verified", "unknown"]);
 const claimIntents = new Set(["intended", "accidental", "unknown"]);
-const sourceKinds = new Set(["session", "prd", "doc", "issue", "pr", "artifact", "code"]);
+const sourceKinds = new Set(["session"]);
 const edgeKinds = new Set(["about", "contains", "touches", "supersedes", "evidenced_by"]);
 const graphObjectTypes = new Set(["component", "flow", "claim", "edge", "source"]);
 
@@ -133,9 +133,25 @@ export function validateProposal(
     if (edge.metadata !== undefined && !isRecord(edge.metadata)) {
       errors.push(`Edge ${stringId(edge.id)} metadata must be an object when present.`);
     }
+
+    if (kind === "evidenced_by") {
+      validateEvidenceMetadata(edge, errors);
+    }
   }
 
   return { valid: errors.length === 0, errors };
+}
+
+function validateEvidenceMetadata(edge: Record<string, unknown>, errors: string[]): void {
+  if (!isRecord(edge.metadata)) {
+    errors.push(`Edge ${stringId(edge.id)} evidenced_by edges require metadata.reason.`);
+    return;
+  }
+
+  const reason = edge.metadata.reason;
+  if (!isNonEmptyString(reason)) {
+    errors.push(`Edge ${stringId(edge.id)} evidenced_by metadata.reason must be a non-empty string.`);
+  }
 }
 
 function validateSubjectBase(

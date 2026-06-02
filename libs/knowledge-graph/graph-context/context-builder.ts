@@ -1,6 +1,6 @@
 import type { Claim } from "../claim.js";
 import type { GraphReadResult } from "../service.js";
-import type { Component, Flow } from "../schema.js";
+import type { Component, Flow, Source } from "../schema.js";
 import type { SqliteRepository } from "../../storage/sqlite/repository.js";
 import { graphContextConfig, type GraphContextConfig } from "./config.js";
 import {
@@ -15,7 +15,7 @@ import { float32ArrayToBuffer, bufferToFloat32Array, cosineSimilarity } from "./
 import { scoreBm25 } from "./bm25.js";
 import { scoreExact } from "./exact.js";
 import { rankContextDocuments, roundScore, selectRankedDocuments, type RankedContextDocument, type SemanticScoreEntry } from "./rank.js";
-import type { ClaimContextResult, ComponentContextResult, EmbeddingStatus, FlowContextResult, GraphContextResult, GraphContextSource } from "./types.js";
+import type { ClaimContextResult, ClaimEvidenceResult, ComponentContextResult, EmbeddingStatus, FlowContextResult, GraphContextResult, GraphContextSource } from "./types.js";
 
 export interface BuildGraphContextOptions {
   warnOnCreatedEmbeddings?: boolean;
@@ -35,6 +35,7 @@ export class GraphContextBuilder {
     const claimDocuments = buildClaimDocuments(graph);
     const componentDocuments = buildComponentDocuments(graph);
     const flowDocuments = buildFlowDocuments(graph);
+    const evidenceByClaim = buildEvidenceByClaim(graph);
     const documents = [...claimDocuments, ...componentDocuments, ...flowDocuments];
     const embedder = new OpenAIEmbedder(config.embedding);
     const embeddingStatus = await this.ensureEmbeddings(repoId, documents, embedder, config);
@@ -56,7 +57,7 @@ export class GraphContextBuilder {
       ranked.claims,
       config,
       { minimumSelected: config.ranking.minimumSelectedClaims },
-    ).map(toClaimResult);
+    ).map((document, index) => toClaimResult(document, index, evidenceByClaim));
 
     return {
       query,
@@ -75,6 +76,7 @@ export class GraphContextBuilder {
         "flow",
         config,
       ),
+      sources: selectedEvidenceSources(selectedClaims),
     };
   }
 
@@ -177,14 +179,53 @@ export class GraphContextBuilder {
   }
 }
 
-function toClaimResult(document: RankedContextDocument, index: number): ClaimContextResult {
+function buildEvidenceByClaim(graph: GraphReadResult): Map<string, ClaimEvidenceResult[]> {
+  const sources = new Map(graph.sources.map((source) => [source.id, source]));
+  const evidenceByClaim = new Map<string, ClaimEvidenceResult[]>();
+
+  for (const edge of graph.edges) {
+    if (edge.kind !== "evidenced_by" || edge.from_type !== "claim" || edge.to_type !== "source") continue;
+    const source = sources.get(edge.to_id);
+    if (!source) continue;
+
+    const existing = evidenceByClaim.get(edge.from_id) ?? [];
+    existing.push({
+      source,
+      reason: evidenceReason(edge.metadata),
+    });
+    evidenceByClaim.set(edge.from_id, existing);
+  }
+
+  return evidenceByClaim;
+}
+
+function evidenceReason(metadata: Record<string, unknown> | undefined): string {
+  return typeof metadata?.reason === "string" ? metadata.reason : "";
+}
+
+function toClaimResult(
+  document: RankedContextDocument,
+  index: number,
+  evidenceByClaim: Map<string, ClaimEvidenceResult[]>,
+): ClaimContextResult {
   return {
     rank: index + 1,
     score: roundScore(document.score),
     signals: roundSignals(document),
     object: document.document.object as Claim,
     about: document.document.about,
+    evidence: evidenceByClaim.get(document.document.id) ?? [],
   };
+}
+
+function selectedEvidenceSources(claims: ClaimContextResult[]): Source[] {
+  const sourcesById = new Map<string, Source>();
+  for (const claim of claims) {
+    for (const evidence of claim.evidence) {
+      sourcesById.set(evidence.source.id, evidence.source);
+    }
+  }
+  return [...sourcesById.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 function selectGraphObjects(

@@ -1,5 +1,5 @@
 import type { Claim } from "../claim.js";
-import type { Component, Flow } from "../schema.js";
+import type { Component, Flow, Source } from "../schema.js";
 
 export interface EmbeddingStatus {
   checked_objects: number;
@@ -25,12 +25,18 @@ export interface ContextSignals {
   graph_sources: GraphContextSource[];
 }
 
+export interface ClaimEvidenceResult {
+  source: Source;
+  reason: string;
+}
+
 export interface ClaimContextResult {
   rank: number;
   score: number;
   signals: ContextSignals;
   object: Claim;
   about: Array<{ type: "component" | "flow"; id: string }>;
+  evidence: ClaimEvidenceResult[];
 }
 
 export interface GraphObjectContextResult<TObject> {
@@ -54,4 +60,5 @@ export interface GraphContextResult {
   claims: ClaimContextResult[];
   components: ComponentContextResult[];
   flows: FlowContextResult[];
+  sources: Source[];
 }

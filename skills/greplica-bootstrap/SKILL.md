@@ -83,6 +83,7 @@ Write a JSON proposal to a temporary file:
 Allowed claim kinds: `fact`, `requirement`, `decision`, `task`, `question`, `risk`.
 Allowed truth values: `code_verified`, `source_verified`, `unknown`.
 Allowed intent values: `intended`, `accidental`, `unknown`.
+Allowed source kinds: `session`.
 
 Use compact relationship fields where possible:
 
@@ -92,7 +93,7 @@ Use compact relationship fields where possible:
 - `claim.about[]` for Claim -> Component/Flow.
 - `claim.supersedes[]`, `component.supersedes[]`, or `flow.supersedes[]` only when replacing known existing memory.
 
-Sources are external artifacts such as sessions, PRDs, docs, issues, PRs, or artifacts. Do not create a source just because code was inspected during bootstrap.
+Sources currently represent session artifacts. Do not create a source just because code was inspected during bootstrap.
 
 ## Quality Bar
 

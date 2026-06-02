@@ -30,14 +30,7 @@ export interface Flow {
   name: string;
 }
 
-export type SourceKind =
-  | "session"
-  | "prd"
-  | "doc"
-  | "issue"
-  | "pr"
-  | "artifact"
-  | "code";
+export type SourceKind = "session";
 
 export interface Source {
   id: SourceId;
