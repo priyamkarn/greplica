@@ -14,7 +14,7 @@ import {
 } from "../../libs/config/greplica-config.js";
 import { graphContextConfigFromGreplicaConfig } from "../../libs/knowledge-graph/graph-context/config.js";
 import { createEmbedder } from "../../libs/knowledge-graph/graph-context/embedder.js";
-import { compactGraphContextResult, renderGraphContextMarkdown } from "../../libs/knowledge-graph/graph-context/render.js";
+import { renderGraphContextMarkdown } from "../../libs/knowledge-graph/graph-context/render.js";
 import { buildGraphFolderExport } from "../../libs/knowledge-graph/folder-export.js";
 import { installGreplica, platformDisplayName } from "../../libs/install/install.js";
 import type { InstallEmbedding, InstallPlatform } from "../../libs/install/paths.js";
@@ -91,14 +91,12 @@ async function main(argv: string[]): Promise<void> {
 
   if (area === "graph" && action === "context") {
     const output = parseGraphContextOutput(rest);
-    const query = rest.filter((arg) => arg !== "--json" && arg !== "--debug").join(" ").trim();
+    const query = rest.filter((arg) => arg !== "--debug").join(" ").trim();
     if (query.length === 0) throw new Error(`Usage: greplica graph ${action} <query>`);
     const { repo, service } = createCommandContext();
     const result = await service.contextGraph(repo, query);
     if (output === "debug") {
       console.log(JSON.stringify(result, null, 2));
-    } else if (output === "json") {
-      console.log(JSON.stringify(compactGraphContextResult(result), null, 2));
     } else {
       console.log(renderGraphContextMarkdown(result));
     }
@@ -364,12 +362,10 @@ function requireFile(file: string | undefined, usage: string): string {
   return file;
 }
 
-function parseGraphContextOutput(args: string[]): "markdown" | "json" | "debug" {
-  const json = args.includes("--json");
+function parseGraphContextOutput(args: string[]): "markdown" | "debug" {
+  if (args.includes("--json")) throw new Error("greplica graph context --json was removed; use Markdown output or --debug.");
   const debug = args.includes("--debug");
-  if (json && debug) throw new Error("Use either --json or --debug, not both.");
   if (debug) return "debug";
-  if (json) return "json";
   return "markdown";
 }
 
@@ -411,7 +407,7 @@ function printHelp(): void {
   ${cli} config
   ${cli} doctor [--check-embeddings]
   ${cli} graph read
-  ${cli} graph context <query> [--json|--debug]
+  ${cli} graph context <query> [--debug]
   ${cli} graph export <dir>
   ${cli} proposal validate <file>
   ${cli} proposal apply <file>`);

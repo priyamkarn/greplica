@@ -40,15 +40,15 @@ interface SearchRubric {
   score: {
     pass_threshold: number;
     weights: {
-      precision_at_k: number;
-      recall_at_k: number;
+      packet_relevant_coverage: number;
+      packet_noise_score: number;
       mrr_at_k: number;
       ndcg_at_k: number;
       grade_recall_at_k: number;
     };
     minimums: {
-      precision_at_k: number;
-      recall_at_k: number;
+      packet_relevant_coverage: number;
+      packet_noise_score: number;
       mrr_at_k: number;
       ndcg_at_k: number;
       grade_recall_at_k: number;
@@ -75,7 +75,8 @@ interface QueryScore {
     weakly_relevant: string[];
   };
   command: CommandResult;
-  precision_at_k: number;
+  packet_relevant_coverage: number;
+  packet_noise_score: number;
   recall_at_k: number;
   mrr_at_k: number;
   ndcg_at_k: number;
@@ -84,7 +85,8 @@ interface QueryScore {
 }
 
 interface AggregateScore {
-  precision_at_k: number;
+  packet_relevant_coverage: number;
+  packet_noise_score: number;
   recall_at_k: number;
   mrr_at_k: number;
   ndcg_at_k: number;
@@ -144,7 +146,7 @@ function main(): void {
   console.log(`Run directory: ${context.runDir}`);
   console.log(`Score: ${score.final_score.toFixed(2)} / 100`);
   console.log(
-    `P@${rubric.k}: ${score.precision_at_k.toFixed(3)}  R@${rubric.k}: ${score.recall_at_k.toFixed(3)}  MRR@${rubric.k}: ${score.mrr_at_k.toFixed(3)}  nDCG@${rubric.k}: ${score.ndcg_at_k.toFixed(3)}  GradeRecall@${rubric.k}: ${score.grade_recall_at_k.toFixed(3)}`,
+    `PacketCoverage: ${score.packet_relevant_coverage.toFixed(3)}  PacketNoiseScore: ${score.packet_noise_score.toFixed(3)}  R@${rubric.k}: ${score.recall_at_k.toFixed(3)}  MRR@${rubric.k}: ${score.mrr_at_k.toFixed(3)}  nDCG@${rubric.k}: ${score.ndcg_at_k.toFixed(3)}  GradeRecall@${rubric.k}: ${score.grade_recall_at_k.toFixed(3)}`,
   );
   process.exitCode = success ? 0 : 1;
 }
@@ -231,7 +233,20 @@ function scoreQuery(qrels: Map<string, number>, returnedIds: string[], k: number
   const expectedIds = [...qrels.keys()];
   const seen = new Set<string>();
   const relevantInTopK: string[] = [];
+  const packetSeen = new Set<string>();
+  let relevantInPacket = 0;
+  let irrelevantInPacket = 0;
   let retrievedGradeSum = 0;
+
+  for (const id of returnedIds) {
+    if (packetSeen.has(id)) continue;
+    packetSeen.add(id);
+    if ((qrels.get(id) ?? 0) > 0) {
+      relevantInPacket += 1;
+    } else {
+      irrelevantInPacket += 1;
+    }
+  }
 
   for (const id of topK) {
     if (seen.has(id)) continue;
@@ -247,7 +262,8 @@ function scoreQuery(qrels: Map<string, number>, returnedIds: string[], k: number
   const totalGrade = [...qrels.values()].reduce((sum, grade) => sum + grade, 0);
 
   return {
-    precision_at_k: round(relevantInTopK.length / k),
+    packet_relevant_coverage: round(expectedIds.length === 0 ? 0 : relevantInPacket / expectedIds.length),
+    packet_noise_score: round(packetSeen.size === 0 ? 0 : 1 - irrelevantInPacket / packetSeen.size),
     recall_at_k: round(relevantInTopK.length / expectedIds.length),
     mrr_at_k: round(firstRelevantIndex === -1 ? 0 : 1 / (firstRelevantIndex + 1)),
     ndcg_at_k: round(dcg(topK.map((id) => qrels.get(id) ?? 0)) / idealDcg([...qrels.values()], k)),
@@ -256,15 +272,16 @@ function scoreQuery(qrels: Map<string, number>, returnedIds: string[], k: number
 }
 
 function scoreRun(rubric: SearchRubric, queryScores: QueryScore[]): AggregateScore {
-  const precision = average(queryScores.map((score) => score.precision_at_k));
+  const packetRelevantCoverage = average(queryScores.map((score) => score.packet_relevant_coverage));
+  const packetNoiseScore = average(queryScores.map((score) => score.packet_noise_score));
   const recall = average(queryScores.map((score) => score.recall_at_k));
   const mrr = average(queryScores.map((score) => score.mrr_at_k));
   const ndcg = average(queryScores.map((score) => score.ndcg_at_k));
   const gradeRecall = average(queryScores.map((score) => score.grade_recall_at_k));
   const weights = rubric.score.weights;
   const finalScore = round(
-    precision * weights.precision_at_k +
-      recall * weights.recall_at_k +
+    packetRelevantCoverage * weights.packet_relevant_coverage +
+      packetNoiseScore * weights.packet_noise_score +
       mrr * weights.mrr_at_k +
       ndcg * weights.ndcg_at_k +
       gradeRecall * weights.grade_recall_at_k,
@@ -274,14 +291,15 @@ function scoreRun(rubric: SearchRubric, queryScores: QueryScore[]): AggregateSco
   const passed =
     enoughQueriesRan &&
     finalScore >= rubric.score.pass_threshold &&
-    precision >= minimums.precision_at_k &&
-    recall >= minimums.recall_at_k &&
+    packetRelevantCoverage >= minimums.packet_relevant_coverage &&
+    packetNoiseScore >= minimums.packet_noise_score &&
     mrr >= minimums.mrr_at_k &&
     ndcg >= minimums.ndcg_at_k &&
     gradeRecall >= minimums.grade_recall_at_k;
 
   return {
-    precision_at_k: precision,
+    packet_relevant_coverage: packetRelevantCoverage,
+    packet_noise_score: packetNoiseScore,
     recall_at_k: recall,
     mrr_at_k: mrr,
     ndcg_at_k: ndcg,
@@ -310,6 +328,10 @@ function parseReturnedIds(stdout: string): string[] {
     throw new Error("Graph context JSON output must be an object.");
   }
 
+  if (Array.isArray(parsed.ranked_results)) {
+    return parseRankedResults(parsed.ranked_results);
+  }
+
   return [
     ...parseTypedResults(parsed.claims, "claim"),
     ...parseTypedResults(parsed.components, "component"),
@@ -317,6 +339,15 @@ function parseReturnedIds(stdout: string): string[] {
   ]
     .sort((a, b) => b.score - a.score || resultTypeOrder(a.type) - resultTypeOrder(b.type) || a.id.localeCompare(b.id))
     .map((result) => `${result.type}:${result.id}`);
+}
+
+function parseRankedResults(value: unknown[]): string[] {
+  return value.map((result) => {
+    if (!isRecord(result) || typeof result.type !== "string" || !allowedResultTypes.has(result.type) || !isRecord(result.object) || typeof result.object.id !== "string") {
+      throw new Error("Each ranked result must include type and object.id.");
+    }
+    return `${result.type}:${result.object.id}`;
+  });
 }
 
 function parseTypedResults(value: unknown, type: "claim" | "component" | "flow"): Array<{ type: "claim" | "component" | "flow"; id: string; score: number }> {

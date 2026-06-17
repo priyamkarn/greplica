@@ -13,9 +13,9 @@ import {
 import { createEmbedder, type Embedder } from "./embedder.js";
 import { float32ArrayToBuffer, bufferToFloat32Array, cosineSimilarity } from "./vector.js";
 import { scoreBm25 } from "./bm25.js";
-import { scoreExact } from "./exact.js";
+import { applyGraphRanking } from "./graph-rank.js";
 import { rankContextDocuments, roundScore, selectRankedDocuments, type RankedContextDocument, type SemanticScoreEntry } from "./rank.js";
-import type { ClaimContextResult, ClaimEvidenceResult, ComponentContextResult, EmbeddingStatus, FlowContextResult, GraphContextResult, GraphContextSource } from "./types.js";
+import type { ClaimContextResult, ClaimEvidenceResult, ComponentContextResult, EmbeddingStatus, FlowContextResult, GraphContextResult, RankedContextDebugResult, RankedGraphContextResult } from "./types.js";
 
 export interface BuildGraphContextOptions {
   warnOnCreatedEmbeddings?: boolean;
@@ -44,7 +44,7 @@ export class GraphContextBuilder {
     }
 
     const queryEmbedding = await embedder.embed(query);
-    const ranked = applyGraphBoost(
+    const ranked = applyGraphRanking(
       {
         claims: this.rankDocuments(repoId, query, queryEmbedding, claimDocuments, config),
         components: this.rankDocuments(repoId, query, queryEmbedding, componentDocuments, config),
@@ -53,30 +53,40 @@ export class GraphContextBuilder {
       graph,
       config,
     );
-    const selectedClaims = selectRankedDocuments(
+    const selectedClaims = selectClaims(
       ranked.claims,
+      evidenceByClaim,
       config,
-      { minimumSelected: config.ranking.minimumSelectedClaims },
-    ).map((document, index) => toClaimResult(document, index, evidenceByClaim));
+    );
+    const selectedComponents = selectGraphObjects(
+      ranked.components,
+      selectedClaims,
+      "component",
+      config,
+    ) as ComponentContextResult[];
+    const selectedFlows = selectGraphObjects(
+      ranked.flows,
+      selectedClaims,
+      "flow",
+      config,
+    ) as FlowContextResult[];
+    const rankedResults = rankPacketResults(selectedClaims, selectedComponents, selectedFlows);
 
     return {
       query,
       search_config_version: config.version,
       embedding_status: embeddingStatus,
       claims: selectedClaims,
-      components: selectGraphObjects(
-        ranked.components,
-        selectedClaims,
-        "component",
-        config,
-      ),
-      flows: selectGraphObjects(
-        ranked.flows,
-        selectedClaims,
-        "flow",
-        config,
-      ),
+      components: selectedComponents,
+      flows: selectedFlows,
+      ranked_results: rankedResults,
       sources: selectedEvidenceSources(selectedClaims),
+      debug: {
+        ranked_results: rankedResults,
+        ranked_claims: ranked.claims.map((document, index) => toRankedDebugResult(document, index) as RankedContextDebugResult<Claim>),
+        ranked_components: ranked.components.map((document, index) => toRankedDebugResult(document, index) as RankedContextDebugResult<Component>),
+        ranked_flows: ranked.flows.map((document, index) => toRankedDebugResult(document, index) as RankedContextDebugResult<Flow>),
+      },
     };
   }
 
@@ -137,8 +147,7 @@ export class GraphContextBuilder {
   ): RankedContextDocument[] {
     const semantic = this.scoreSemantic(repoId, documents, queryEmbedding, config);
     const bm25 = scoreBm25(query, documents, config);
-    const exact = scoreExact(query, documents);
-    return rankContextDocuments(documents, semantic, bm25, exact, config);
+    return rankContextDocuments(documents, semantic, bm25, config);
   }
 
   private scoreSemantic(
@@ -160,6 +169,7 @@ export class GraphContextBuilder {
     return scored.map((entry, index) => ({
       id: entry.id,
       score: maxScore === 0 ? 0 : entry.score / maxScore,
+      raw_score: entry.score,
       rank: index + 1,
     }));
   }
@@ -203,6 +213,18 @@ function evidenceReason(metadata: Record<string, unknown> | undefined): string {
   return typeof metadata?.reason === "string" ? metadata.reason : "";
 }
 
+type ContextRelation = "primary" | "additional";
+
+function selectClaims(
+  ranked: RankedContextDocument[],
+  evidenceByClaim: Map<string, ClaimEvidenceResult[]>,
+  config: GraphContextConfig,
+): ClaimContextResult[] {
+  return selectRankedDocuments(ranked, config, { minimumSelected: config.ranking.minimumSelectedClaims })
+    .sort((left, right) => right.score - left.score || left.document.key.localeCompare(right.document.key))
+    .map((document, index) => toClaimResult(document, index, evidenceByClaim));
+}
+
 function toClaimResult(
   document: RankedContextDocument,
   index: number,
@@ -216,6 +238,54 @@ function toClaimResult(
     about: document.document.about,
     evidence: evidenceByClaim.get(document.document.id) ?? [],
   };
+}
+
+function toRankedDebugResult(
+  document: RankedContextDocument,
+  index: number,
+): RankedContextDebugResult<Claim | Component | Flow> {
+  return {
+    rank: index + 1,
+    score: roundScore(document.score),
+    signals: roundSignals(document),
+    object: document.document.object,
+    about: document.document.about,
+  };
+}
+
+function relationSortValue(relation: ContextRelation): number {
+  return relation === "primary" ? 0 : 1;
+}
+
+function packetTypeSortValue(type: RankedGraphContextResult["type"]): number {
+  switch (type) {
+    case "component":
+      return 0;
+    case "flow":
+      return 1;
+    case "claim":
+      return 2;
+  }
+}
+
+function rankPacketResults(
+  claims: ClaimContextResult[],
+  components: ComponentContextResult[],
+  flows: FlowContextResult[],
+): RankedGraphContextResult[] {
+  const results: RankedGraphContextResult[] = [
+    ...components.map((component) => ({ ...component, type: "component" as const })),
+    ...flows.map((flow) => ({ ...flow, type: "flow" as const })),
+    ...claims.map((claim) => ({ ...claim, type: "claim" as const })),
+  ];
+
+  return results
+    .sort((a, b) =>
+      b.score - a.score ||
+      packetTypeSortValue(a.type) - packetTypeSortValue(b.type) ||
+      a.object.id.localeCompare(b.object.id),
+    )
+    .map((result, index) => ({ ...result, rank: index + 1 }));
 }
 
 function selectedEvidenceSources(claims: ClaimContextResult[]): Source[] {
@@ -238,14 +308,22 @@ function selectGraphObjects(
   for (const document of ranked) {
     const support = claimSupport(claims, type, document.document.id, config);
     const directScore = document.score * config.ranking.directObject.weight;
+    const directRawScore = document.signals.weighted_raw_score * config.ranking.directObject.weight;
     const score = Math.max(directScore, support.score);
-    if (Math.max(document.score, support.score) < config.ranking.selectionThreshold) continue;
+    const passesSelection =
+      support.score >= config.ranking.selectionThreshold ||
+      document.score >= config.ranking.selectionThreshold;
+    if (!passesSelection) continue;
+    const relation: ContextRelation = document.score >= config.ranking.selectionThreshold ? "primary" : "additional";
     if (type === "component") {
       results.push({
         rank: 0,
         score: roundScore(score),
+        context_relation: relation,
         direct_score: roundScore(directScore),
+        direct_raw_score: roundScore(directRawScore),
         claim_support_score: roundScore(support.score),
+        claim_support_raw_score: roundScore(support.rawScore),
         signals: roundSignals(document),
         object: document.document.object as Component,
         matched_claim_ids: support.claimIds,
@@ -254,8 +332,11 @@ function selectGraphObjects(
       results.push({
         rank: 0,
         score: roundScore(score),
+        context_relation: relation,
         direct_score: roundScore(directScore),
+        direct_raw_score: roundScore(directRawScore),
         claim_support_score: roundScore(support.score),
+        claim_support_raw_score: roundScore(support.rawScore),
         signals: roundSignals(document),
         object: document.document.object as Flow,
         matched_claim_ids: support.claimIds,
@@ -264,108 +345,13 @@ function selectGraphObjects(
   }
 
   return results
-    .sort((a, b) => b.score - a.score || b.matched_claim_ids.length - a.matched_claim_ids.length || a.object.id.localeCompare(b.object.id))
+    .sort((a, b) =>
+      relationSortValue(a.context_relation) - relationSortValue(b.context_relation) ||
+      b.score - a.score ||
+      b.matched_claim_ids.length - a.matched_claim_ids.length ||
+      a.object.id.localeCompare(b.object.id),
+    )
     .map((result, index) => ({ ...result, rank: index + 1 }));
-}
-
-interface RankedContextGroups {
-  claims: RankedContextDocument[];
-  components: RankedContextDocument[];
-  flows: RankedContextDocument[];
-}
-
-interface GraphBoostEdge {
-  id: string;
-  edge_kind: string;
-  weight: number;
-}
-
-function applyGraphBoost(
-  groups: RankedContextGroups,
-  graph: GraphReadResult,
-  config: GraphContextConfig,
-): RankedContextGroups {
-  const rankedByKey = new Map(
-    [...groups.claims, ...groups.components, ...groups.flows].map((document) => [document.document.key, document]),
-  );
-  const adjacency = buildGraphBoostAdjacency(graph, config);
-
-  return {
-    claims: boostRankedDocuments(groups.claims, rankedByKey, adjacency, config),
-    components: boostRankedDocuments(groups.components, rankedByKey, adjacency, config),
-    flows: boostRankedDocuments(groups.flows, rankedByKey, adjacency, config),
-  };
-}
-
-function boostRankedDocuments(
-  ranked: RankedContextDocument[],
-  rankedByKey: Map<string, RankedContextDocument>,
-  adjacency: Map<string, GraphBoostEdge[]>,
-  config: GraphContextConfig,
-): RankedContextDocument[] {
-  return ranked
-    .map((document) => {
-      const sources = (adjacency.get(document.document.key) ?? [])
-        .flatMap((edge): GraphContextSource[] => {
-          const neighbor = rankedByKey.get(edge.id);
-          if (!neighbor) return [];
-          return [{
-            id: edge.id,
-            edge_kind: edge.edge_kind,
-            weight: edge.weight,
-            score: neighbor.score * edge.weight,
-          }];
-        })
-        .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
-        .slice(0, config.ranking.graphBoost.maxSources);
-      const graphScore = sources[0]?.score ?? 0;
-
-      return {
-        ...document,
-        score: Math.max(document.score, graphScore),
-        signals: {
-          ...document.signals,
-          graph_score: graphScore,
-          graph_sources: sources,
-        },
-      };
-    })
-    .sort((a, b) => b.score - a.score || a.document.key.localeCompare(b.document.key));
-}
-
-function buildGraphBoostAdjacency(graph: GraphReadResult, config: GraphContextConfig): Map<string, GraphBoostEdge[]> {
-  const adjacency = new Map<string, GraphBoostEdge[]>();
-  for (const edge of graph.edges) {
-    if (edge.kind === "about" && edge.from_type === "claim" && (edge.to_type === "component" || edge.to_type === "flow")) {
-      addBoostEdge(adjacency, contextDocumentKey("claim", edge.from_id), contextDocumentKey(edge.to_type, edge.to_id), "about", config.ranking.graphBoost.aboutClaimToObject);
-      addBoostEdge(adjacency, contextDocumentKey(edge.to_type, edge.to_id), contextDocumentKey("claim", edge.from_id), "about", config.ranking.graphBoost.aboutObjectToClaim);
-    }
-
-    if (edge.kind === "touches" && edge.from_type === "flow" && edge.to_type === "component") {
-      addBoostEdge(adjacency, contextDocumentKey("flow", edge.from_id), contextDocumentKey("component", edge.to_id), "touches", config.ranking.graphBoost.touchesFlowToComponent);
-      addBoostEdge(adjacency, contextDocumentKey("component", edge.to_id), contextDocumentKey("flow", edge.from_id), "touches", config.ranking.graphBoost.touchesComponentToFlow);
-    }
-
-    if (edge.kind === "contains" && edge.from_type === edge.to_type && (edge.from_type === "component" || edge.from_type === "flow")) {
-      const type = edge.from_type;
-      addBoostEdge(adjacency, contextDocumentKey(type, edge.from_id), contextDocumentKey(type, edge.to_id), "contains", config.ranking.graphBoost.containsParentToChild);
-      addBoostEdge(adjacency, contextDocumentKey(type, edge.to_id), contextDocumentKey(type, edge.from_id), "contains", config.ranking.graphBoost.containsChildToParent);
-    }
-  }
-  return adjacency;
-}
-
-function addBoostEdge(
-  adjacency: Map<string, GraphBoostEdge[]>,
-  from: string,
-  to: string,
-  edgeKind: string,
-  weight: number,
-): void {
-  if (weight <= 0) return;
-  const existing = adjacency.get(from) ?? [];
-  existing.push({ id: to, edge_kind: edgeKind, weight });
-  adjacency.set(from, existing);
 }
 
 function claimSupport(
@@ -373,27 +359,42 @@ function claimSupport(
   type: "component" | "flow",
   id: string,
   config: GraphContextConfig,
-): { score: number; claimIds: string[] } {
+): { score: number; rawScore: number; claimIds: string[] } {
   const matched = claims.filter((claim) => claim.about.some((target) => target.type === type && target.id === id));
-  const maxScore = Math.max(0, ...matched.map((claim) => claim.score));
+  const sorted = [...matched].sort((a, b) => b.score - a.score || a.object.id.localeCompare(b.object.id));
+  const maxScore = Math.max(0, ...sorted.map((claim) => claim.score));
+  const maxRawScore = Math.max(0, ...sorted.map((claim) => claim.signals.weighted_raw_score));
   return {
-    score: Math.min(1, maxScore * config.ranking.claimSupport.weight + matched.length * config.ranking.claimSupport.countBoost),
-    claimIds: matched.map((claim) => claim.object.id),
+    score: Math.min(1, maxScore * config.ranking.claimSupport.weight + sorted.length * config.ranking.claimSupport.countBoost),
+    rawScore: maxRawScore,
+    claimIds: sorted.map((claim) => claim.object.id),
   };
 }
 
 function roundSignals(document: RankedContextDocument) {
   return {
     semantic_score: roundScore(document.signals.semantic_score),
+    semantic_raw_score: roundScore(document.signals.semantic_raw_score),
     semantic_rank: document.signals.semantic_rank,
     bm25_score: roundScore(document.signals.bm25_score),
+    bm25_raw_score: roundScore(document.signals.bm25_raw_score),
     bm25_rank: document.signals.bm25_rank,
-    exact_score: roundScore(document.signals.exact_score),
-    exact_rank: document.signals.exact_rank,
+    weighted_score: roundScore(document.signals.weighted_score),
+    weighted_raw_score: roundScore(document.signals.weighted_raw_score),
+    pre_coherence_score: roundScore(document.signals.pre_coherence_score),
     graph_score: roundScore(document.signals.graph_score),
+    graph_raw_score: roundScore(document.signals.graph_raw_score),
     graph_sources: document.signals.graph_sources.map((source) => ({
       ...source,
       score: roundScore(source.score),
+      raw_score: roundScore(source.raw_score),
+    })),
+    coherence_score: roundScore(document.signals.coherence_score),
+    coherence_raw_score: roundScore(document.signals.coherence_raw_score),
+    coherence_sources: document.signals.coherence_sources.map((source) => ({
+      ...source,
+      score: roundScore(source.score),
+      raw_score: roundScore(source.raw_score),
     })),
   };
 }

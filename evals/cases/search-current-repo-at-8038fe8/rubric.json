@@ -6,15 +6,15 @@
   "score": {
     "pass_threshold": 80,
     "weights": {
-      "precision_at_k": 10,
-      "recall_at_k": 25,
-      "mrr_at_k": 15,
-      "ndcg_at_k": 25,
+      "packet_relevant_coverage": 20,
+      "packet_noise_score": 20,
+      "mrr_at_k": 5,
+      "ndcg_at_k": 30,
       "grade_recall_at_k": 25
     },
     "minimums": {
-      "precision_at_k": 0.2,
-      "recall_at_k": 0.35,
+      "packet_relevant_coverage": 0.35,
+      "packet_noise_score": 0.2,
       "mrr_at_k": 0.6,
       "ndcg_at_k": 0.6,
       "grade_recall_at_k": 0.4
@@ -33,8 +33,8 @@
       "claim"
     ],
     "metrics": [
-      "Precision@10 counts how many top-ten context objects have any positive relevance grade.",
-      "Recall@10 counts how many expected positive objects appear in the top ten.",
+      "PacketRelevantCoverage counts how many expected positive objects appear anywhere in the full returned packet.",
+      "PacketNoiseScore is one minus the irrelevant-object rate across unique objects in the full returned packet.",
       "MRR@10 rewards the rank of the first positively relevant object.",
       "nDCG@10 uses graded relevance so highly relevant objects ranked earlier receive more credit.",
       "GradeRecall@10 is the retrieved relevance-grade sum divided by the total expected relevance-grade sum."
