@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { isatty } from "node:tty";
 import { basename, dirname, join, resolve } from "node:path";
-import { createLocalKnowledgeGraphService } from "../../libs/knowledge-graph/service.js";
-import type { KnowledgeGraphService, RepoRef } from "../../libs/knowledge-graph/service.js";
+import { createLocalKnowledgeGraphService, KnowledgeGraphService } from "../../libs/knowledge-graph/service.js";
+import type { KnowledgeGraphService as KnowledgeGraphServiceType, RepoRef } from "../../libs/knowledge-graph/service.js";
 import { envVarSource, loadRepoEnv, type LoadedRepoEnv } from "../../libs/env/load-local-env.js";
 import {
   ensureGreplicaConfig,
@@ -17,14 +18,20 @@ import { createEmbedder } from "../../libs/knowledge-graph/graph-context/embedde
 import { compactGraphContextResult, renderGraphContextMarkdown } from "../../libs/knowledge-graph/graph-context/render.js";
 import { buildGraphFolderExport } from "../../libs/knowledge-graph/folder-export.js";
 import { installGreplica, platformDisplayName } from "../../libs/install/install.js";
+import { allPlatformInstallers } from "../../libs/install/platforms/index.js";
 import type { InstallEmbedding, InstallPlatform } from "../../libs/install/paths.js";
+import { hookCwd, hookEventName, hookSessionId, hookTranscriptPath, readHookInput } from "../../libs/hooks/hook-input.js";
+import { HookSessionStore } from "../../libs/hooks/session-state.js";
+import { runHookWorker, startHookWorker } from "../../libs/hooks/worker.js";
+import { openDatabase } from "../../libs/storage/sqlite/db.js";
+import { SqliteRepository as SqliteKnowledgeGraphRepository } from "../../libs/storage/sqlite/repository.js";
 import { detectRepoContext } from "./repo-context.js";
 
 interface CommandContext {
   repo: RepoRef;
   env: LoadedRepoEnv;
   config: GreplicaConfig;
-  service: KnowledgeGraphService;
+  service: KnowledgeGraphServiceType;
 }
 
 async function main(argv: string[]): Promise<void> {
@@ -37,6 +44,21 @@ async function main(argv: string[]): Promise<void> {
       repo: detectRepoContext(),
     });
     printInstallResult(result);
+    return;
+  }
+
+  if (area === "hook" && action === "ingest") {
+    runHookIngest(rest);
+    return;
+  }
+
+  if (area === "hook" && action === "worker") {
+    await runHookWorker();
+    return;
+  }
+
+  if (area === "session" && action === "mark-memory-current") {
+    runSessionMarkMemoryCurrent(rest);
     return;
   }
 
@@ -133,6 +155,7 @@ async function main(argv: string[]): Promise<void> {
   if (area === "proposal" && action === "apply") {
     const file = requireFile(rest[0], "Usage: greplica proposal apply <file>");
     const { repo, service } = createCommandContext();
+    const init = service.initRepo(repo);
     const proposal = readProposal(file);
     const result = await service.applyProposal(repo, proposal);
     console.log("Applied proposal to working memory.");
@@ -146,6 +169,7 @@ async function main(argv: string[]): Promise<void> {
     console.log(`Embeddings checked: ${result.embedding_status.checked_objects}`);
     console.log(`Embeddings created: ${result.embedding_status.created}`);
     console.log(`Embeddings reused: ${result.embedding_status.reused}`);
+    markProposalApplyMemoryUpdated(init.repo_id, proposal);
     return;
   }
 
@@ -159,6 +183,121 @@ function createCommandContext(): CommandContext {
   const config = ensureGreplicaConfig();
   const service = createLocalKnowledgeGraphService(graphContextConfigFromGreplicaConfig(config));
   return { repo, env, config, service };
+}
+
+function runHookIngest(args: string[]): void {
+  if (process.env.GREPLICA_HOOK_DISABLE === "1") return;
+
+  const platform = parseHookIngestPlatform(args);
+  const stdin = isatty(0) ? "" : readFileSync(0, "utf8");
+  const hook = readHookInput(stdin);
+  const eventName = hookEventName(hook);
+  const cwd = hookCwd(hook) ?? process.cwd();
+  const repo = detectRepoContext(cwd);
+  const db = openDatabase();
+  try {
+    const repository = new SqliteKnowledgeGraphRepository(db);
+    const service = new KnowledgeGraphService(repository);
+    const init = service.initRepo(repo);
+    const sessionStore = new HookSessionStore(db);
+    const result = sessionStore.recordHook({
+      platform,
+      repoId: init.repo_id,
+      sessionId: hookSessionId(hook),
+      transcriptPath: hookTranscriptPath(hook),
+      cwd,
+      eventName,
+    });
+    startHookWorker();
+
+    if (!result.shouldInjectGuidance) return;
+    const additionalContext =
+      `${greplicaContextMarker}: greplica is a repo-memory search tool for finding relevant architecture, decisions, flows, and code anchors. Before broad manual exploration in this repository, run greplica graph context "<question>" with a focused natural-language query. When Greplica provides useful context, mention that you used it and briefly say what it helped with.`;
+    console.log(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "UserPromptSubmit",
+          additionalContext,
+        },
+      }),
+    );
+  } finally {
+    db.close();
+  }
+}
+
+const greplicaContextMarker = "Greplica hook guidance";
+
+function runSessionMarkMemoryCurrent(args: string[]): void {
+  const sessionRef = parseRequiredOption(args, "--session-ref", "Usage: greplica session mark-memory-current --session-ref <ref>");
+  const { repo, service } = createCommandContext();
+  const init = service.initRepo(repo);
+  const db = openDatabase();
+  try {
+    const marked = markMemoryCurrentFromSessionRef(new HookSessionStore(db), init.repo_id, sessionRef);
+    if (marked) {
+      console.log("Marked session memory current.");
+      return;
+    }
+    console.log(`No tracked session matched ${sessionRef}`);
+    process.exitCode = 1;
+  } finally {
+    db.close();
+  }
+}
+
+function markProposalApplyMemoryUpdated(repoId: string, proposal: unknown): void {
+  const sessionRefs = sessionRefsFromProposal(proposal);
+  if (sessionRefs.length === 0) return;
+
+  const db = openDatabase();
+  try {
+    const sessionStore = new HookSessionStore(db);
+    for (const sessionRef of sessionRefs) markMemoryCurrentFromSessionRef(sessionStore, repoId, sessionRef);
+  } finally {
+    db.close();
+  }
+}
+
+function markMemoryCurrentFromSessionRef(sessionStore: HookSessionStore, repoId: string, sessionRef: string): boolean {
+  const identity = sessionIdentityFromSourceRef(sessionRef);
+  if (identity === undefined) return false;
+  return sessionStore.markMemoryCurrent({
+    repoId,
+    platform: identity.platform,
+    sessionId: identity.sessionId,
+  });
+}
+
+function sessionIdentityFromSourceRef(ref: string): { platform: InstallPlatform; sessionId: string } | undefined {
+  for (const platform of allPlatformInstallers()) {
+    const sessionId = platform.sessionIdFromSourceRef(ref);
+    if (sessionId !== undefined && sessionId.length > 0) return { platform: platform.platform, sessionId };
+  }
+  return undefined;
+}
+
+function sessionRefsFromProposal(proposal: unknown): string[] {
+  if (!isRecord(proposal) || !isRecord(proposal.creates) || !Array.isArray(proposal.creates.sources)) return [];
+  const refs: string[] = [];
+  for (const source of proposal.creates.sources) {
+    if (isRecord(source) && source.kind === "session" && typeof source.ref === "string") refs.push(source.ref);
+  }
+  return refs;
+}
+
+function parseHookIngestPlatform(args: string[]): InstallPlatform {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--platform") return parseHookPlatform(args[index + 1]);
+    if (arg.startsWith("--platform=")) return parseHookPlatform(arg.slice("--platform=".length));
+  }
+  throw new Error("Usage: greplica hook ingest --platform codex|claude");
+}
+
+function parseHookPlatform(value: string | undefined): InstallPlatform {
+  if (value === "codex" || value === "claude") return value;
+  throw new Error("Usage: greplica hook ingest --platform codex|claude");
 }
 
 async function runDoctor(args: string[]): Promise<void> {
@@ -193,6 +332,7 @@ async function runDoctor(args: string[]): Promise<void> {
 
   console.log(`Config: ${displayConfigPath()}`);
   printEmbeddingConfig(context.config.embedding);
+  printSessionConfig(context.config.session);
 
   if (context.config.embedding.provider === "openai") {
     const source = envVarSource("OPENAI_API_KEY", context.env);
@@ -241,6 +381,12 @@ function runConfigCommand(args: string[]): void {
   console.log("Allowed embedding.provider values:");
   console.log("- local");
   console.log("- openai");
+  console.log("");
+  console.log("Session hook settings:");
+  printSessionConfig(config.session);
+  console.log("- stopThreshold: run background memory update after this many Stop hooks since memory was current.");
+  console.log("- timeThresholdMinutes: run after this much time if the session has activity not covered by current memory.");
+  console.log("- currentGraceMinutes: skip time-based updates when memory was marked current close to last activity.");
   console.log("");
   console.log("Common embedding examples:");
   console.log("- local MPNet base: provider=local, model=all-mpnet-base-v2, dimensions=768, batchSize=16");
@@ -317,26 +463,39 @@ function printInstallResult(result: Awaited<ReturnType<typeof installGreplica>>)
   console.log("Skills:");
   for (const skill of result.skills) console.log(`- ${skill}`);
   console.log("");
+  if (result.hooks !== undefined) {
+    console.log("Hooks:");
+    console.log(`- events: ${result.hooks.events.join(", ")}`);
+    console.log(`- command: ${result.hooks.command}`);
+    for (const configFile of result.hooks.configFiles) console.log(`- config: ${configFile}`);
+    console.log("- note: your agent may ask you to trust or accept these hooks the next time it starts.");
+    console.log("");
+  }
   console.log("Embedding:");
   console.log(`- ${result.embedding}`);
   console.log(`- config: ${result.configFile}`);
   console.log(`- database: ${result.databasePath}`);
+  console.log(`- session stop threshold: ${result.session.stopThreshold}`);
+  console.log(`- session time threshold: ${result.session.timeThresholdMinutes} minutes`);
+  console.log(`- session current grace: ${result.session.currentGraceMinutes} minutes`);
   console.log("");
-  console.log("How to use Greplica:");
-  console.log("- If this repo has not been initialized yet, ask your coding agent to run greplica-bootstrap for this repo. You only need to do this once per repo.");
-  console.log("- After that, your coding agent can use greplica graph context \"<question>\" inside tasks to fetch relevant repo context, including prior working memory, before broad manual exploration.");
-  console.log("- Near the end of a useful session, ask your coding agent to run greplica-update-working-memory so decisions, changed flows, constraints, and follow-up work are stored.");
+  console.log("Next steps:");
+  console.log("- Restart your coding agent if the new skills or hooks do not appear immediately.");
+  if (result.hooks !== undefined) {
+    console.log("- Accept or trust the installed hooks if your agent asks. Hooks record session activity and attempt background working-memory updates.");
+    console.log("- If you do not accept the hooks, background saves will not run; manually ask the agent to use greplica-update-working-memory near the end of useful sessions.");
+  } else {
+    console.log("- Hooks were not installed for this platform. Manually ask the agent to use greplica-update-working-memory near the end of useful sessions.");
+  }
+  console.log("- Add a short AGENTS.md/CLAUDE.md instruction if hooks are unavailable or not accepted: use greplica graph context \"<question>\" before broad manual exploration.");
+  console.log("- Ask the agent to use greplica-bootstrap once for repos that do not have memory yet.");
+  console.log("- During work, the agent can run greplica graph context \"<question>\" to fetch relevant repo memory.");
   if (result.embedding === "local") {
     console.log(`- OpenAI embeddings are also available if you want better retrieval quality later: greplica install --platform ${result.platform} --embedding openai`);
   } else {
     console.log(`- Local embeddings are also available if you want to switch back later: greplica install --platform ${result.platform} --embedding local`);
   }
   for (const note of result.notes) console.log(`- ${note}`);
-  console.log(`- IMPORTANT: add the Greplica guidance block to ${platformGuidanceFile(result.platform)} yourself if you want the agent to keep using Greplica automatically.`);
-}
-
-function platformGuidanceFile(platform: InstallPlatform): string {
-  return platform === "claude" ? "CLAUDE.md" : "AGENTS.md";
 }
 
 function installUsage(): string {
@@ -351,6 +510,12 @@ function printEmbeddingConfig(config: EmbeddingConfig): void {
   console.log(`Embedding batch size: ${config.batchSize}`);
 }
 
+function printSessionConfig(config: GreplicaConfig["session"]): void {
+  console.log(`Session stop threshold: ${config.stopThreshold}`);
+  console.log(`Session time threshold minutes: ${config.timeThresholdMinutes}`);
+  console.log(`Session current grace minutes: ${config.currentGraceMinutes}`);
+}
+
 function displayConfigPath(): string {
   return resolve(greplicaConfigPath());
 }
@@ -362,6 +527,15 @@ function readProposal(file: string): unknown {
 function requireFile(file: string | undefined, usage: string): string {
   if (file === undefined || file.trim().length === 0) throw new Error(usage);
   return file;
+}
+
+function parseRequiredOption(args: string[], name: string, usage: string): string {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === name) return requireFile(args[index + 1], usage);
+    if (arg.startsWith(`${name}=`)) return requireFile(arg.slice(name.length + 1), usage);
+  }
+  throw new Error(usage);
 }
 
 function parseGraphContextOutput(args: string[]): "markdown" | "json" | "debug" {
@@ -403,6 +577,10 @@ function field(item: object, key: string): string {
   return value === undefined || value === null ? "" : String(value);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function printHelp(): void {
   const cli = basename(process.argv[1] ?? "greplica");
   console.log(`Usage:
@@ -413,6 +591,7 @@ function printHelp(): void {
   ${cli} graph read
   ${cli} graph context <query> [--json|--debug]
   ${cli} graph export <dir>
+  ${cli} session mark-memory-current --session-ref <ref>
   ${cli} proposal validate <file>
   ${cli} proposal apply <file>`);
 }

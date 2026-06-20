@@ -14,6 +14,7 @@ import {
 import { runCodexAgent } from "../../../libs/agent-runner/codex.js";
 import type { AgentRunResult } from "../../../libs/agent-runner/types.js";
 import { loadRepoEnv } from "../../../libs/env/load-local-env.js";
+import { codexInstaller } from "../../../libs/install/platforms/codex.js";
 
 const caseId = "update-working-memory-source-evidence-at-0438915";
 const baseCommit = "0438915ee216a28fa01fb8ff416be74272cb8691";
@@ -213,18 +214,6 @@ interface ScoreResult {
   final_score: number;
   pass_threshold: number;
   passed: boolean;
-}
-
-interface SessionTranscriptProjection {
-  metadata: Record<string, string>;
-  messages: SessionTranscriptMessage[];
-}
-
-interface SessionTranscriptMessage {
-  timestamp: string | undefined;
-  role: "human" | "agent";
-  phase: string | undefined;
-  message: string;
 }
 
 main().catch((error: unknown) => {
@@ -521,93 +510,10 @@ The proposal should update working memory with session-specific durable context.
 }
 
 function writeSessionTranscriptMarkdown(context: RunContext): void {
-  const projection = projectSessionTranscript(readFileSync(context.sessionTranscriptPath, "utf8"));
-  writeFileSync(context.sessionTranscriptMarkdownPath, renderSessionTranscriptMarkdown(projection));
-}
-
-function projectSessionTranscript(jsonl: string): SessionTranscriptProjection {
-  const metadata: Record<string, string> = {};
-  const messages: SessionTranscriptMessage[] = [];
-
-  for (const line of jsonl.split("\n")) {
-    const event = parseJsonLine(line);
-    if (!isRecord(event)) continue;
-
-    if (event.type === "session_meta" && isRecord(event.payload)) {
-      copyStringField(metadata, event.payload, "id", "session_id");
-      copyStringField(metadata, event.payload, "timestamp", "session_timestamp");
-      copyStringField(metadata, event.payload, "cwd", "cwd");
-      copyStringField(metadata, event.payload, "originator", "originator");
-      copyStringField(metadata, event.payload, "cli_version", "cli_version");
-      copyStringField(metadata, event.payload, "source", "source");
-      copyStringField(metadata, event.payload, "model_provider", "model_provider");
-      continue;
-    }
-
-    if (event.type !== "event_msg" || !isRecord(event.payload)) continue;
-    const payloadType = event.payload.type;
-    if (payloadType !== "user_message" && payloadType !== "agent_message") continue;
-
-    const message = event.payload.message;
-    if (typeof message !== "string" || message.trim().length === 0) continue;
-    const sanitizedMessage = sanitizeTranscriptMessage(message);
-    if (sanitizedMessage.length === 0) continue;
-    messages.push({
-      timestamp: typeof event.timestamp === "string" ? event.timestamp : undefined,
-      role: payloadType === "user_message" ? "human" : "agent",
-      phase: typeof event.payload.phase === "string" ? event.payload.phase : undefined,
-      message: sanitizedMessage,
-    });
-  }
-
-  return { metadata, messages };
-}
-
-function sanitizeTranscriptMessage(message: string): string {
-  return message
-    .replace(/<system_instruction>[\s\S]*?<\/system_instruction>\s*/g, "")
-    .replace(/<developer_instruction>[\s\S]*?<\/developer_instruction>\s*/g, "")
-    .trim();
-}
-
-function renderSessionTranscriptMarkdown(projection: SessionTranscriptProjection): string {
-  const sections = ["# Filtered Session Transcript", ""];
-
-  sections.push("## Metadata", "");
-  for (const [key, value] of Object.entries(projection.metadata)) {
-    sections.push(`- ${key}: ${value}`);
-  }
-  sections.push("", "## Messages", "");
-
-  for (const message of projection.messages) {
-    const details = [message.timestamp, message.phase].filter((item): item is string => item !== undefined);
-    const suffix = details.length === 0 ? "" : ` (${details.join(", ")})`;
-    sections.push(`### ${message.role}${suffix}`, "", message.message.trim(), "");
-  }
-
-  return `${sections.join("\n").trimEnd()}\n`;
-}
-
-function copyStringField(
-  target: Record<string, string>,
-  source: Record<string, unknown>,
-  sourceKey: string,
-  targetKey: string,
-): void {
-  const value = source[sourceKey];
-  if (typeof value === "string" && value.trim().length > 0) {
-    target[targetKey] = value;
-  }
-}
-
-function parseJsonLine(line: string): unknown | undefined {
-  const trimmed = line.trim();
-  if (trimmed.length === 0) return undefined;
-  try {
-    return JSON.parse(trimmed) as unknown;
-  } catch {
-    return undefined;
-  }
+  writeFileSync(
+    context.sessionTranscriptMarkdownPath,
+    codexInstaller.transcriptToMarkdown(readFileSync(context.sessionTranscriptPath, "utf8")),
+  );
 }
 
 async function requestJudge(apiKey: string, model: string, input: JudgeInput): Promise<JudgeOutput> {

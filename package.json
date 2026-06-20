@@ -1,6 +1,6 @@
 {
   "name": "greplica",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Long-term, searchable AGENTS.md for coding agents.",
   "private": false,
   "type": "module",
@@ -11,7 +11,11 @@
   "bin": {
     "greplica": "dist/apps/cli/main.js"
   },
+  "engines": {
+    "node": ">=22.0.0 <27.0.0"
+  },
   "scripts": {
+    "preinstall": "node scripts/check-node-version.js",
     "build": "tsc -p tsconfig.build.json",
     "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
@@ -23,12 +27,13 @@
   "files": [
     "dist/apps",
     "dist/libs",
+    "scripts/check-node-version.js",
     "skills",
     "README.md"
   ],
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
-    "better-sqlite3": "^11.9.1"
+    "better-sqlite3": "^12.11.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

@@ -14,6 +14,13 @@ export interface EmbeddingConfig {
 export interface GreplicaConfig {
   version: 1;
   embedding: EmbeddingConfig;
+  session: SessionConfig;
+}
+
+export interface SessionConfig {
+  stopThreshold: number;
+  timeThresholdMinutes: number;
+  currentGraceMinutes: number;
 }
 
 export interface EmbeddingConfigInput {
@@ -38,9 +45,16 @@ const embeddingDefaults: Record<EmbeddingProvider, EmbeddingConfig> = {
   },
 };
 
+export const defaultSessionConfig: SessionConfig = {
+  stopThreshold: 7,
+  timeThresholdMinutes: 40,
+  currentGraceMinutes: 5,
+};
+
 export const defaultGreplicaConfig: GreplicaConfig = {
   version: 1,
   embedding: { ...embeddingDefaults.local },
+  session: { ...defaultSessionConfig },
 };
 
 export function defaultEmbeddingConfig(provider: EmbeddingProvider): EmbeddingConfig {
@@ -79,6 +93,7 @@ export function writeGreplicaConfig(config: GreplicaConfig, path = greplicaConfi
 }
 
 export function updateEmbeddingConfig(input: EmbeddingConfigInput, path = greplicaConfigPath()): GreplicaConfig {
+  const existing = readGreplicaConfig(path);
   const base = defaultEmbeddingConfig(input.provider);
   const config: GreplicaConfig = {
     version: 1,
@@ -88,6 +103,7 @@ export function updateEmbeddingConfig(input: EmbeddingConfigInput, path = grepli
       dimensions: input.dimensions ?? base.dimensions,
       batchSize: input.batchSize ?? base.batchSize,
     },
+    session: existing.session,
   };
   writeGreplicaConfig(config, path);
   return config;
@@ -108,6 +124,7 @@ function normalizeConfig(value: unknown, path: string): GreplicaConfig {
   const model = parseString(embeddingValue.model, defaults.model, "embedding.model", path);
   const dimensions = parsePositiveInteger(embeddingValue.dimensions, defaults.dimensions, "embedding.dimensions", path);
   const batchSize = parsePositiveInteger(embeddingValue.batchSize, defaults.batchSize, "embedding.batchSize", path);
+  const session = normalizeSessionConfig(value.session, path);
 
   return {
     version: 1,
@@ -117,6 +134,27 @@ function normalizeConfig(value: unknown, path: string): GreplicaConfig {
       dimensions,
       batchSize,
     },
+    session,
+  };
+}
+
+function normalizeSessionConfig(value: unknown, path: string): SessionConfig {
+  if (value === undefined) return { ...defaultSessionConfig };
+  if (!isRecord(value)) throw new Error(`Invalid Greplica config at ${path}: session must be an object.`);
+  return {
+    stopThreshold: parsePositiveInteger(value.stopThreshold, defaultSessionConfig.stopThreshold, "session.stopThreshold", path),
+    timeThresholdMinutes: parsePositiveInteger(
+      value.timeThresholdMinutes,
+      defaultSessionConfig.timeThresholdMinutes,
+      "session.timeThresholdMinutes",
+      path,
+    ),
+    currentGraceMinutes: parsePositiveInteger(
+      value.currentGraceMinutes,
+      defaultSessionConfig.currentGraceMinutes,
+      "session.currentGraceMinutes",
+      path,
+    ),
   };
 }
 
@@ -146,5 +184,6 @@ function cloneConfig(config: GreplicaConfig): GreplicaConfig {
   return {
     version: config.version,
     embedding: { ...config.embedding },
+    session: { ...config.session },
   };
 }

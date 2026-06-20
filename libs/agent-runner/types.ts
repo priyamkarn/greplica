@@ -3,7 +3,7 @@ export type AgentKind = "codex";
 export interface AgentRunInput {
   cwd: string;
   env: NodeJS.ProcessEnv;
-  model: string;
+  model?: string;
   prompt: string;
   transcriptPath: string;
   finalMessagePath: string;

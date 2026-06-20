@@ -16,7 +16,7 @@ export async function runCodexAgent(input: AgentRunInput): Promise<AgentRunResul
 
   return {
     agent: "codex",
-    model: input.model,
+    model: input.model ?? "default",
     elapsed_ms: elapsedMs,
     transcript_path: input.transcriptPath,
     final_message_path: input.finalMessagePath,
@@ -31,23 +31,24 @@ function runCodexProcess(
   transcript: NodeJS.WritableStream,
 ): Promise<{ exitCode: number | null; signal: string | null }> {
   return new Promise((resolve, reject) => {
+    const args = [
+      "--ask-for-approval",
+      "never",
+      "exec",
+      "--json",
+      "--cd",
+      input.cwd,
+      "--sandbox",
+      "danger-full-access",
+      "--output-last-message",
+      input.finalMessagePath,
+      "-",
+    ];
+    if (input.model !== undefined) args.splice(4, 0, "--model", input.model);
+
     const child = spawn(
       "codex",
-      [
-        "--ask-for-approval",
-        "never",
-        "exec",
-        "--json",
-        "--model",
-        input.model,
-        "--cd",
-        input.cwd,
-        "--sandbox",
-        "danger-full-access",
-        "--output-last-message",
-        input.finalMessagePath,
-        "-",
-      ],
+      args,
       {
         cwd: input.cwd,
         env: input.env,

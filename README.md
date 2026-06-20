@@ -33,42 +33,19 @@ Greplica keeps that deeper engineering context in local repo memory. Your agent 
 
 Most users should not install Greplica by hand. Paste this into your coding agent from inside the repo you want Greplica to remember:
 
+Greplica requires Node.js 22-26.
+
 `````txt
 Install Greplica for this repo.
 
-First install the CLI:
+Run:
 
 ```bash
 npm install -g greplica
+greplica install --platform <codex|claude|opencode> --embedding local
 ```
 
-Then run the installer for the agent I am using:
-
-Codex:
-```bash
-greplica install --platform codex --embedding local
-```
-
-Claude Code:
-```bash
-greplica install --platform claude --embedding local
-```
-
-OpenCode:
-```bash
-greplica install --platform opencode --embedding local
-```
-
-Do not manually copy skills. Let the installer do it.
-
-After installation, tell me where the skills were installed, which embedding mode was configured, whether I should restart the agent, and how to switch later to OpenAI embeddings if I want that.
-
-Then tell me how to use Greplica:
-- If this repo has not been initialized yet, tell me to run "Use greplica-bootstrap for this repo." once. If repo memory already exists, do not run it again.
-- Tell me that during work, the agent can use `greplica graph context "<question>"` to fetch relevant repo context, including prior working memory, before broad manual exploration.
-- Tell me that near the end of a useful session, I should run "Use greplica-update-working-memory for this session." so decisions, changed flows, constraints, and follow-up work are stored.
-- Tell me that OpenAI embeddings are also available later by rerunning `greplica install --platform <codex-or-claude-or-opencode> --embedding openai`.
-- IMPORTANT: tell me to add the Greplica guidance block manually to AGENTS.md or CLAUDE.md if I want the agent to keep using Greplica automatically.
+Use the platform matching this agent. Do not manually copy skills. After installation, summarize the installer output, including whether hooks were installed and whether I need to accept or trust them.
 `````
 
 After that, the normal workflow is:
@@ -77,7 +54,7 @@ After that, the normal workflow is:
 | --- | --- | --- |
 | 1 | `Use greplica-bootstrap for this repo.` | Creates the first repo memory map. |
 | 2 | Work normally | The agent can query `greplica graph context "<question>"` before broad exploration. |
-| 3 | `Use greplica-update-working-memory for this session.` | Durable decisions, constraints, changed flows, and follow-ups are saved. |
+| 3 | Accept hooks, or run `Use greplica-update-working-memory for this session.` manually | Durable decisions, constraints, changed flows, and follow-ups are saved. |
 
 <details>
 <summary>Manual install commands</summary>
@@ -88,24 +65,8 @@ Install the CLI:
 npm install -g greplica
 ```
 
-Install Greplica for your coding agent.
-
-Codex:
-
 ```bash
-greplica install --platform codex --embedding local
-```
-
-Claude Code:
-
-```bash
-greplica install --platform claude --embedding local
-```
-
-OpenCode:
-
-```bash
-greplica install --platform opencode --embedding local
+greplica install --platform <codex|claude|opencode> --embedding local
 ```
 
 </details>
