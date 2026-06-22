@@ -18,7 +18,7 @@
 
 AI coding agents are good at reading files. They are bad at remembering what they already learned.
 
-Every new session, your agent re-explores the same directories, re-reads the same files, and rediscovers the same gotchas — wasting tokens and time on work it already did.
+Every new session, your agent re-explores the same directories, re-reads the same files, and rediscovers the same gotchas - wasting tokens and time on work it already did.
 
 **Greplica** gives your agent a persistent memory graph it can query before exploring. Architecture decisions, workflow boundaries, implementation constraints, rejected alternatives, and follow-up tasks survive across sessions and are retrieved only when relevant.
 
@@ -35,7 +35,7 @@ Greplica stores engineering context in a local SQLite database as a structured k
 | **Claim** | A durable fact, decision, constraint, gotcha, or task linked to the components or flows it describes |
 | **Edge** | A typed relationship: `about`, `touches`, `contains`, `supersedes`, `evidenced_by` |
 
-When your agent asks `greplica graph context "<question>"`, Greplica runs a hybrid retrieval pipeline — combining vector similarity, BM25 keyword scoring, and graph adjacency boosts — and returns a concise Markdown summary the agent can act on immediately.
+When your agent asks `greplica graph context "<question>"`, Greplica runs a hybrid retrieval pipeline - combining vector similarity, BM25 keyword scoring, and graph adjacency boosts - and returns a concise Markdown summary the agent can act on immediately.
 
 ---
 
@@ -70,7 +70,7 @@ Claims:
 - `claim.apply_prints_commit_scope_and_counts` (fact, code_verified): proposal apply prints the memory commit ID, scope ID, and created object counts.
 ```
 
-The agent gets the relevant file anchors, the decision trail, and the constraints — without reading the whole codebase.
+The agent gets the relevant file anchors, the decision trail, and the constraints - without reading the whole codebase.
 
 ---
 
@@ -110,7 +110,7 @@ Ask your agent:
 Use greplica-bootstrap for this repo.
 ```
 
-The agent reads your repository shallowly — README, config files, key entrypoints, type definitions — and writes a structured memory proposal. After validation and apply, the graph is ready.
+The agent reads your repository shallowly - README, config files, key entrypoints, type definitions - and writes a structured memory proposal. After validation and apply, the graph is ready.
 
 ---
 
@@ -128,12 +128,12 @@ The agent reads your repository shallowly — README, config files, key entrypoi
 
 Greplica is for context that is too detailed for an always-read prompt but too important to rediscover from scratch:
 
-- **Architecture and service boundaries** — which module owns what, where boundaries are enforced
-- **Implementation decisions** — why the code is shaped the way it is
-- **Workflow behavior** — how commands and flows work across multiple components
-- **Repo-specific gotchas** — edge cases and non-obvious behaviors that caused bugs
-- **Constraints and rejected alternatives** — what not to do, and why
-- **Follow-up tasks** — work that was deferred, not forgotten
+- **Architecture and service boundaries** - which module owns what, where boundaries are enforced
+- **Implementation decisions** - why the code is shaped the way it is
+- **Workflow behavior** - how commands and flows work across multiple components
+- **Repo-specific gotchas** - edge cases and non-obvious behaviors that caused bugs
+- **Constraints and rejected alternatives** - what not to do, and why
+- **Follow-up tasks** - work that was deferred, not forgotten
 
 The goal is not to replace source code or documentation. It is to give agents a durable map of what matters and where to look next.
 
@@ -208,9 +208,9 @@ greplica proposal validate <proposal.json>
 greplica proposal apply <proposal.json>
 ```
 
-- `greplica graph context "<query>"` — returns Markdown for agent use. Add `--json` for compact structured output, or `--debug` for the full retrieval payload with ranking signals.
-- `greplica graph read` — prints the current graph view: all components, flows, claims, sources, and edges in scope.
-- `greplica doctor` — verifies installation and diagnoses embedding configuration failures. Not a required preflight before every command.
+- `greplica graph context "<query>"` - returns Markdown for agent use. Add `--json` for compact structured output, or `--debug` for the full retrieval payload with ranking signals.
+- `greplica graph read` - prints the current graph view: all components, flows, claims, sources, and edges in scope.
+- `greplica doctor` - verifies installation and diagnoses embedding configuration failures. Not a required preflight before every command.
 - `greplica` automatically prepares memory state when commands run; no separate init step is needed.
 
 ---
