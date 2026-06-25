@@ -1,4 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import {
   type CommandResult,
@@ -34,6 +35,7 @@ interface RunContext {
   targetRepoDir: string;
   targetRepoUrl: string;
   greplicaHomeDir: string;
+  codexHomeDir: string;
   seedProposalPath: string;
   sessionTranscriptPath: string;
   sessionTranscriptMarkdownPath: string;
@@ -269,6 +271,7 @@ function prepareRun(): RunContext {
   const targetRepoDir = resolve(runDir, "target-repo");
   const targetRepoUrl = process.env.GREPLICA_EVAL_TARGET_REPO_URL ?? repoRoot;
   const greplicaHomeDir = resolve(runDir, "greplica-home");
+  const codexHomeDir = resolve(runDir, "codex-home");
 
   mkdirSync(runDir, { recursive: true });
 
@@ -279,6 +282,7 @@ function prepareRun(): RunContext {
     targetRepoDir,
     targetRepoUrl,
     greplicaHomeDir,
+    codexHomeDir,
     seedProposalPath: resolve(runDir, "bootstrap-seed.proposal.json"),
     sessionTranscriptPath: resolve(runDir, "session.codex.jsonl"),
     sessionTranscriptMarkdownPath: resolve(runDir, "session.messages.md"),
@@ -304,10 +308,21 @@ function prepareTargetRepo(context: RunContext): void {
 
 function prepareGreplicaHome(context: RunContext): void {
   mkdirSync(context.greplicaHomeDir, { recursive: true });
+  mkdirSync(context.codexHomeDir, { recursive: true });
+  seedCodexRuntimeHome(context.codexHomeDir);
+}
+
+function seedCodexRuntimeHome(codexHomeDir: string): void {
+  const sourceHome = resolve(homedir(), ".codex");
+  for (const file of ["auth.json", "config.toml", "models_cache.json", ".codex-global-state.json", "installation_id"]) {
+    const source = resolve(sourceHome, file);
+    if (existsSync(source)) copyFileSync(source, resolve(codexHomeDir, file));
+  }
 }
 
 function seedBootstrapMemory(context: RunContext): CommandResult[] {
   return [
+    runProductCommand(context, "install", "--platform", "codex", "--embedding", "local"),
     runProductCommand(context, "proposal", "validate", context.seedProposalPath),
     runProductCommand(context, "proposal", "apply", context.seedProposalPath),
   ];
@@ -321,7 +336,7 @@ async function runUpdateAgent(context: RunContext, args: Args): Promise<AgentRun
   const model = args.agentModel ?? "gpt-5.4-mini";
   const result = await runCodexAgent({
     cwd: context.targetRepoDir,
-    env: { ...process.env, GREPLICA_HOME: context.greplicaHomeDir },
+    env: { ...process.env, CODEX_HOME: context.codexHomeDir, GREPLICA_HOME: context.greplicaHomeDir },
     model,
     prompt: codexUpdatePrompt(context),
     transcriptPath: resolve(context.runDir, "agent-events.jsonl"),
@@ -353,7 +368,11 @@ function readFinalGraph(context: RunContext): CommandResult {
 }
 
 function runProductCommand(context: RunContext, ...args: string[]): CommandResult {
-  const env = { ...process.env, GREPLICA_HOME: context.greplicaHomeDir };
+  const env = {
+    ...process.env,
+    CODEX_HOME: context.codexHomeDir,
+    GREPLICA_HOME: context.greplicaHomeDir,
+  };
   return run([...context.greplicaCommand, ...args], context.targetRepoDir, env);
 }
 

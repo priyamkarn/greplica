@@ -17,8 +17,9 @@ import { runCodexAgent } from "../../../libs/agent-runner/codex.js";
 import type { AgentRunResult } from "../../../libs/agent-runner/types.js";
 import { loadRepoEnv } from "../../../libs/env/load-local-env.js";
 
-const caseId = "bootstrap-current-repo-at-8038fe8";
-const targetCommit = "8038fe8c82c3cf7c9175c188f503aa0df72d2fa2";
+const caseId = "curated-doc-bootstrap-vercel-chat-at-f3de128";
+const targetCommit = "f3de12823cae746b34b2641ce9ea0798914370b6";
+const defaultTargetRepoUrl = "https://github.com/vercel/chat.git";
 
 interface Args {
   proposal?: string;
@@ -149,7 +150,7 @@ async function main(): Promise<void> {
   const success = commandsSucceeded && (judge === undefined || judge.score.passed);
   writeResult(context, commands, success, generation, judge);
 
-  console.log(success ? "Eval run passed." : "Eval run failed.");
+  console.log(success ? "Curated-doc bootstrap eval passed." : "Curated-doc bootstrap eval failed.");
   console.log(`Run directory: ${context.runDir}`);
   if (judge) {
     console.log(`Score: ${judge.score.final_score.toFixed(2)} / 100`);
@@ -162,11 +163,11 @@ function prepareRun(): RunContext {
   loadRepoEnv(repoRoot);
   const runDir = resolve(repoRoot, "eval-runs", timestamp(), caseId);
   const targetRepoDir = resolve(runDir, "target-repo");
-  const targetRepoUrl = process.env.GREPLICA_EVAL_TARGET_REPO_URL ?? repoRoot;
+  const targetRepoUrl = process.env.GREPLICA_EVAL_TARGET_REPO_URL ?? defaultTargetRepoUrl;
   const greplicaHomeDir = resolve(runDir, "greplica-home");
   const codexHomeDir = resolve(runDir, "codex-home");
   const proposalPath = resolve(runDir, "proposal.json");
-  const rubricPath = resolve(repoRoot, "evals/cases/bootstrap-current-repo-at-8038fe8/rubric.json");
+  const rubricPath = resolve(repoRoot, "evals/cases/curated-doc-bootstrap-vercel-chat-at-f3de128/rubric.json");
   const greplicaCommand = ["node", resolve(repoRoot, "dist/apps/cli/main.js")];
 
   mkdirSync(runDir, { recursive: true });
@@ -213,7 +214,7 @@ async function getProposal(context: RunContext, args: Args): Promise<AgentRunRes
     const model = args.agentModel ?? "gpt-5.4-mini";
     const result = await runCodexAgent({
       cwd: context.targetRepoDir,
-      env: { ...process.env, CODEX_HOME: context.codexHomeDir, GREPLICA_HOME: context.greplicaHomeDir },
+      env: agentEnv(context),
       model,
       prompt: codexBootstrapPrompt(context),
       transcriptPath: resolve(context.runDir, "agent-events.jsonl"),
@@ -242,12 +243,23 @@ function runProductCommands(context: RunContext): CommandResult[] {
 }
 
 function runProductCommand(context: RunContext, ...args: string[]): CommandResult {
-  const env = {
+  return run([...context.greplicaCommand, ...args], context.targetRepoDir, evalEnv(context), { stdio: "inherit" });
+}
+
+function evalEnv(context: RunContext): NodeJS.ProcessEnv {
+  return {
     ...process.env,
     CODEX_HOME: context.codexHomeDir,
     GREPLICA_HOME: context.greplicaHomeDir,
   };
-  return run([...context.greplicaCommand, ...args], context.targetRepoDir, env, { stdio: "inherit" });
+}
+
+function agentEnv(context: RunContext): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    CODEX_HOME: context.codexHomeDir,
+    GREPLICA_HOME: context.greplicaHomeDir,
+  };
 }
 
 async function runOpenAiJudge(
@@ -263,7 +275,7 @@ async function runOpenAiJudge(
   const rubric = readJson<Rubric>(context.rubricPath);
   const proposal = readJson<unknown>(context.proposalPath);
   const judgeInput: JudgeInput = {
-    task: "Judge this bootstrap memory proposal for the pinned repo commit. Return JSON classification only; do not compute numeric scores.",
+    task: "Judge this Greplica bootstrap proposal for curated documentation ingestion in the pinned vercel/chat repo. Return JSON classification only; do not compute numeric scores.",
     rubric: rubric.judge,
     repo_tree: repoTree(context.targetRepoDir),
     proposal,
@@ -311,7 +323,7 @@ function parseArgs(args: string[]): Args {
   const proposal = valueAfter(args, "--proposal");
   const agent = valueAfter(args, "--agent");
   if ((proposal === undefined && agent === undefined) || (proposal !== undefined && agent !== undefined)) {
-    throw new Error("Usage: npm run eval:bootstrap-current -- (--proposal /path/to/proposal.json | --agent codex) [--agent-model model] [--judge openai] [--judge-model model]");
+    throw new Error("Usage: npm run eval:curated-doc-bootstrap-vercel-chat -- (--proposal /path/to/proposal.json | --agent codex) [--agent-model model] [--judge openai] [--judge-model model]");
   }
   if (agent !== undefined && agent !== "codex") throw new Error("Only --agent codex is supported.");
 
@@ -330,7 +342,7 @@ function codexBootstrapPrompt(context: RunContext): string {
   const skill = readFileSync(resolve(context.repoRoot, "skills/greplica-bootstrap/SKILL.md"), "utf8");
   const greplica = context.greplicaCommand.join(" ");
 
-  return `You are running a Greplica bootstrap workflow for this repository.
+  return `You are running a Greplica bootstrap workflow for the pinned vercel/chat repository.
 
 Use this exact user-facing skill as the workflow contract:
 
@@ -343,18 +355,26 @@ Runtime facts for this eval:
 - GREPLICA_HOME is already set to an isolated eval directory.
 - Use this greplica command exactly: ${greplica}
 - Write the final proposal JSON exactly here: ${context.proposalPath}
-- If this repository contains any skills/*/SKILL.md files, treat those files as part of the repository being bootstrapped. Do not ignore skill files just because the bootstrap skill content is included above as the workflow contract.
-- If this repository contains graph schema/type/model files that define components, flows, claims, edges, scopes, memberships, or commits, consider whether they are important top-level memory.
+- This eval specifically checks curated documentation ingestion. Inventory tracked *.md and *.mdx files across the repository before source code, then read the relevant durable docs.
+- Read both root-level curated docs and package-level docs/agent files. In this repo, high-signal examples include README.md, AGENTS.md, .github/CONTRIBUTING.md, apps/docs/content/docs/contributing/testing.mdx, apps/docs/content/docs/contributing/documenting.mdx, apps/docs/content/docs/contributing/publishing.mdx, packages/adapter-slack/AGENTS.md, packages/adapter-github/AGENTS.md, and packages/create-chat-sdk/AGENTS.md.
+- Use component.repository for repo-wide facts from root README, root AGENTS.md, .github/CONTRIBUTING.md, and docs/contributing pages.
+- Do not ingest skills/**/SKILL.md files as generic curated context.
+- Do not create component-per-file source maps or copy raw documentation prose.
+- Preserve the repo identity from README.md, the root command/release/docs rules from AGENTS.md and CONTRIBUTING.md, and the adapter testing/documentation/publishing contracts from apps/docs/content/docs/contributing/*.mdx.
+- Preserve package-specific contracts from package-level AGENTS.md files on narrower components; do not attach Slack/GitHub/create-chat-sdk specifics only to component.repository.
+- Prefer source_verified claims for doc-derived facts. Use code_verified only for facts actually checked in source, and avoid extra source-code details that are not needed for curated-doc bootstrap memory.
+- Use a general adapter package-family component for adapter/state package conventions, and a docs-site component for apps/docs content and adapter listing rules.
+- Avoid implementation-level constants, auth/storage internals, or fixture claims unless a curated doc explicitly makes them durable guidance.
 
 Task:
 1. Run the skill workflow for bootstrap memory on this repo.
-2. Inspect the repo shallowly. Prefer top-level components, flows, and durable claims.
+2. Inspect curated docs first, then inspect source shallowly only to validate top-level anchors.
 3. Create a compact proposal JSON at ${context.proposalPath}.
 4. Validate it with: ${greplica} proposal validate ${context.proposalPath}
 5. Fix validation errors until valid.
 6. Do not apply the proposal.
 
-The proposal should be useful to a future coding agent and should avoid deep implementation trivia.`;
+The proposal should help a future coding agent understand repo-level conventions plus a few key package/interface contracts without a deep code audit.`;
 }
 
 async function requestJudge(apiKey: string, model: string, input: JudgeInput): Promise<JudgeOutput> {
@@ -370,7 +390,7 @@ async function requestJudge(apiKey: string, model: string, input: JudgeInput): P
         {
           role: "system",
           content:
-            "You are an evaluator for Greplica bootstrap proposals. Return JSON only. Classify expected nodes, expected edges, and quality issues. Do not calculate numeric scores.",
+            "You are an evaluator for Greplica curated-document bootstrap proposals. Return JSON only. Classify expected nodes, expected edges, and quality issues. Do not calculate numeric scores.",
         },
         {
           role: "user",
@@ -380,7 +400,7 @@ async function requestJudge(apiKey: string, model: string, input: JudgeInput): P
       text: {
         format: {
           type: "json_schema",
-          name: "bootstrap_eval_judge",
+          name: "curated_doc_bootstrap_eval_judge",
           strict: true,
           schema: judgeOutputSchema(),
         },

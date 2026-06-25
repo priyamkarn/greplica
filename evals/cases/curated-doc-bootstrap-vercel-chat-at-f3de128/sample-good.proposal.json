@@ -1,0 +1,280 @@
+{
+  "title": "Bootstrap curated-doc memory for vercel/chat",
+  "summary": "Curated documentation memory for Chat SDK repo-level rules, core concepts, adapter contribution contracts, and representative package-specific agent guidance.",
+  "creates": {
+    "components": [
+      {
+        "id": "component.repository",
+        "name": "Repository",
+        "code_anchor": "README.md, AGENTS.md, .github/CONTRIBUTING.md"
+      },
+      {
+        "id": "component.core_sdk",
+        "name": "Core Chat SDK concepts",
+        "code_anchor": "AGENTS.md, packages/chat"
+      },
+      {
+        "id": "component.adapter_packages",
+        "name": "Adapter package family",
+        "code_anchor": ".github/CONTRIBUTING.md, apps/docs/content/docs/contributing"
+      },
+      {
+        "id": "component.docs_site",
+        "name": "User-facing docs site",
+        "code_anchor": "apps/docs/content/docs"
+      },
+      {
+        "id": "component.slack_adapter",
+        "name": "Slack adapter package",
+        "code_anchor": "packages/adapter-slack/AGENTS.md, packages/adapter-slack"
+      },
+      {
+        "id": "component.github_adapter",
+        "name": "GitHub adapter package",
+        "code_anchor": "packages/adapter-github/AGENTS.md, packages/adapter-github"
+      },
+      {
+        "id": "component.create_chat_sdk",
+        "name": "create-chat-sdk CLI",
+        "code_anchor": "packages/create-chat-sdk/AGENTS.md, packages/create-chat-sdk"
+      }
+    ],
+    "flows": [
+      {
+        "id": "flow.root_validation_workflow",
+        "name": "Root setup and validation workflow",
+        "touches": [
+          "component.repository"
+        ]
+      },
+      {
+        "id": "flow.webhook_message_flow",
+        "name": "Platform webhook to Chat handler flow",
+        "touches": [
+          "component.core_sdk",
+          "component.adapter_packages"
+        ]
+      },
+      {
+        "id": "flow.adapter_contribution_workflow",
+        "name": "Adapter contribution, documentation, and publishing workflow",
+        "touches": [
+          "component.repository",
+          "component.adapter_packages",
+          "component.docs_site"
+        ]
+      }
+    ],
+    "claims": [
+      {
+        "id": "claim.repo_identity",
+        "kind": "fact",
+        "text": "Chat SDK is a unified TypeScript SDK for building chat bots across Slack, Microsoft Teams, Google Chat, Discord, Telegram, GitHub, Linear, and WhatsApp.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.repository"
+        ]
+      },
+      {
+        "id": "claim.repo_commands_validate",
+        "kind": "requirement",
+        "text": "Repository work uses pnpm commands from the root, and pnpm validate runs knip, check, typecheck, test, and build before a task is declared complete.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.repository",
+          "flow.root_validation_workflow"
+        ]
+      },
+      {
+        "id": "claim.monorepo_architecture",
+        "kind": "fact",
+        "text": "The repository is a pnpm monorepo orchestrated by Turborepo; packages are ESM TypeScript bundled with tsup, with core chat, adapter, shared-adapter, state, integration-test, docs, and example app areas.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.repository",
+          "component.core_sdk",
+          "component.adapter_packages",
+          "component.docs_site"
+        ]
+      },
+      {
+        "id": "claim.repo_dependency_commit_rules",
+        "kind": "requirement",
+        "text": "Dependencies should be added with pnpm add rather than hand-editing package.json, commits must be signed and verified, and commit messages should follow Conventional Commits.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.repository"
+        ]
+      },
+      {
+        "id": "claim.docs_update_rule",
+        "kind": "requirement",
+        "text": "When behavior, public APIs, or environment variables change, the relevant user-facing docs under apps/docs/content/docs should be updated in the same PR and previewed with pnpm --filter docs dev.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.repository",
+          "component.docs_site",
+          "flow.adapter_contribution_workflow"
+        ]
+      },
+      {
+        "id": "claim.changeset_release_rule",
+        "kind": "requirement",
+        "text": "The monorepo uses Changesets with fixed versioning, so every PR that changes package behavior must include a pnpm changeset and all packages share the same release version.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.repository"
+        ]
+      },
+      {
+        "id": "claim.core_concepts",
+        "kind": "fact",
+        "text": "Core Chat SDK concepts are Chat, Adapter, StateAdapter, Thread, and Message; adapters normalize platform messages while Thread exposes actions such as post, subscribe, startTyping, and setState.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.core_sdk"
+        ]
+      },
+      {
+        "id": "claim.webhook_message_flow",
+        "kind": "fact",
+        "text": "Incoming platform webhooks hit /api/webhooks/{platform}; the adapter verifies and parses the request, Chat acquires a thread lock and routes to the matching handler, and handlers receive Thread and Message objects.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.core_sdk",
+          "component.adapter_packages",
+          "flow.webhook_message_flow"
+        ]
+      },
+      {
+        "id": "claim.formatting_contract",
+        "kind": "fact",
+        "text": "Messages use mdast as the canonical format, and each adapter FormatConverter provides toAst, fromAst, and renderPostable for platform-specific conversion.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.core_sdk",
+          "component.adapter_packages"
+        ]
+      },
+      {
+        "id": "claim.adapter_catalog_contract",
+        "kind": "requirement",
+        "text": "packages/chat/src/adapters/index.ts powers the zero-dependency chat/adapters subpath, must stay in sync with apps/docs/adapters.json, and must not import adapter packages or platform SDKs.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.core_sdk",
+          "component.adapter_packages",
+          "component.docs_site"
+        ]
+      },
+      {
+        "id": "claim.adapter_surface_conventions",
+        "kind": "requirement",
+        "text": "konsistent enforces adapter and state package public surfaces: adapter packages expose a NameAdapter class, createNameAdapter factory, and NameAdapterConfig type; state packages expose matching StateAdapter, createNameState, and options exports.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.adapter_packages",
+          "flow.adapter_contribution_workflow"
+        ]
+      },
+      {
+        "id": "claim.adapter_testing_expectations",
+        "kind": "requirement",
+        "text": "Adapters are a trust boundary and should have high coverage: unit tests for public methods plus tests for factory config/env fallback, thread ID roundtrip, webhook signatures, message parsing, and format conversion.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.adapter_packages",
+          "flow.adapter_contribution_workflow"
+        ]
+      },
+      {
+        "id": "claim.adapter_documentation_expectations",
+        "kind": "requirement",
+        "text": "Adapter documentation should include README badges, install, quick start, environment variables, configuration reference, platform setup, features, license, TSDoc for exported interfaces/factories, and sample-messages.md with real webhook payloads.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.adapter_packages",
+          "component.docs_site",
+          "flow.adapter_contribution_workflow"
+        ]
+      },
+      {
+        "id": "claim.adapter_publishing_contract",
+        "kind": "requirement",
+        "text": "Community adapters should be ESM, publish compiled dist only, define explicit exports, declare chat as a peer dependency, avoid the reserved @chat-adapter npm scope, and pin README refs in apps/docs/adapters.json listings.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.adapter_packages",
+          "component.docs_site",
+          "flow.adapter_contribution_workflow"
+        ]
+      },
+      {
+        "id": "claim.slack_adapter_contract",
+        "kind": "fact",
+        "text": "The Slack adapter connects Chat SDK bots to Slack via HTTP webhooks, optional Socket Mode, single-workspace or OAuth authentication, Block Kit rendering, native streaming, and slack:{channelId}:{threadTs} thread IDs.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.slack_adapter"
+        ]
+      },
+      {
+        "id": "claim.slack_testing_contract",
+        "kind": "fact",
+        "text": "Slack package tests are pure Vitest unit tests, while Slack integration and replay tests live under packages/integration-tests and use recorded fixtures without requiring workspace credentials.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.slack_adapter"
+        ]
+      },
+      {
+        "id": "claim.github_adapter_contract",
+        "kind": "fact",
+        "text": "The GitHub adapter connects bots to issue and pull-request comment threads, supports GitHub App authentication with installation-scoped tokens, and distinguishes issue, pr, and review thread types.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.github_adapter"
+        ]
+      },
+      {
+        "id": "claim.github_adapter_gotchas",
+        "kind": "fact",
+        "text": "GitHub adapter gotchas include bot logins ending in [bot], separate review-comment and issue-comment endpoints, edit history on comments, webhook redeliveries, and X-GitHub-Delivery as the replay dedupe key.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.github_adapter"
+        ]
+      },
+      {
+        "id": "claim.create_chat_sdk_contract",
+        "kind": "requirement",
+        "text": "create-chat-sdk scaffolds Chat SDK bot projects; adapter metadata must come from chat/adapters, CLI-only scaffold behavior belongs in src/catalog/scaffold-spec.ts, and the generated template is webhook-only without pages, layouts, or client UI.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.create_chat_sdk"
+        ]
+      }
+    ],
+    "sources": [],
+    "edges": []
+  }
+}

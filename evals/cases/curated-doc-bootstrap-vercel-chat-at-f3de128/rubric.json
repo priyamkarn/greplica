@@ -1,0 +1,254 @@
+{
+  "case_id": "curated-doc-bootstrap-vercel-chat-at-f3de128",
+  "target_repo_url": "https://github.com/vercel/chat.git",
+  "target_commit": "f3de12823cae746b34b2641ce9ea0798914370b6",
+  "score": {
+    "pass_threshold": 82,
+    "node_coverage_points": 55,
+    "edge_coverage_points": 15,
+    "quality_points": 30,
+    "quality_penalties": {
+      "noisy_structure_node_points": 3,
+      "noisy_structure_node_max": 12,
+        "bad_claim_points": 3,
+        "bad_claim_max": 12,
+      "bad_anchor_points": 3,
+      "bad_anchor_max": 9,
+      "depth_violation_points": 10,
+      "weak_graph_linking_points": 8
+    }
+  },
+  "judge": {
+    "instructions": [
+      "Judge whether the proposal is a good Greplica bootstrap memory graph for curated documentation ingestion in the pinned vercel/chat repo.",
+      "Do not compute a numeric score. Only classify expected nodes, expected edges, and quality issues.",
+      "Judge semantic equivalence, not exact IDs or exact wording.",
+      "A node can satisfy an expected item if it clearly represents the same concept, even with a different ID.",
+      "A claim can satisfy an expected node if it explicitly preserves the same durable memory, even with different wording.",
+      "An edge can satisfy an expected relation if the proposal connects the same semantic subjects through inline compact fields or canonical edges.",
+      "Compact relationship fields are graph edges: flow.touches creates Flow -> Component touches edges, claim.about creates Claim -> Component/Flow about edges, component.contains creates Component -> Component contains edges, and flow.contains creates Flow -> Flow contains edges.",
+      "This eval rewards memory distilled from tracked curated docs anywhere in the repo: root README/AGENTS/CLAUDE/CONTRIBUTING docs, apps/docs Markdown/MDX, package AGENTS.md files, package README.md files, sample-messages.md, architecture/design/development/testing/publishing docs, and similar curated Markdown/MDX.",
+      "Repo-wide claims should be about component.repository or a semantically equivalent repository component. Package-specific adapter or CLI facts should not be attached only to component.repository.",
+      "Do not require source objects for doc-derived claims. This schema currently allows only session sources, so doc evidence is represented by distilled claim text and anchors.",
+      "Do not mark a real existing source file or source folder as a bad anchor merely because it is broad. Bad anchors are fake paths, generated/dependency paths, .git paths, or useless anchors like the repo root.",
+      "Do not mark a combined top-level component as noisy merely because a more detailed rubric has separate expected nodes. Missing specificity belongs in node coverage, not quality penalties.",
+      "Do not treat a claim's truth label by itself as proof of a depth violation. A model may label a doc-derived claim code_verified; judge the content and anchors, not the label alone.",
+      "Do not penalize a fact merely because it comes from a deep Markdown/MDX file. Deep package docs are good bootstrap input when they contain durable contracts, rules, or rationale and the claim is attached to an appropriate package/component.",
+      "For claim.slack_adapter_contract, require the proposal to explicitly preserve the Slack-specific thread ID contract: slack:{channelId}:{threadTs} or an equivalent channelId/threadTs encodeThreadId/decodeThreadId statement. A generic repo-wide {adapter}:{channel}:{thread} claim is not enough.",
+      "Penalize depth when the proposal appears to derive low-level behavior from source-code spelunking, maps every package/file/function, or stores implementation trivia not presented as durable guidance in Markdown/MDX.",
+      "The proposal should be useful to a future coding agent that needs repo-level rules plus a few key package contracts before editing."
+    ],
+    "actual_repo_facts": [
+      "README.md says Chat SDK is a unified TypeScript SDK for building chat bots across Slack, Microsoft Teams, Google Chat, Discord, Telegram, GitHub, Linear, and WhatsApp.",
+      "README.md says the create-chat-sdk CLI generates Chat configuration, webhook routes, .env.example, dependencies, and optional Web adapter route from the adapter catalog.",
+      "README.md says official, vendor-official, and community adapters are browsed on chat-sdk.dev/adapters.",
+      "Root AGENTS.md lists root commands: pnpm install, pnpm build, pnpm typecheck, pnpm check, pnpm fix, pnpm knip, pnpm konsistent, pnpm test, pnpm validate, pnpm dev.",
+      "Root AGENTS.md says pnpm validate is knip plus check plus typecheck plus test plus build and should be run before declaring a task done.",
+      "Root AGENTS.md says dependencies should be installed with pnpm add rather than editing package.json by hand.",
+      "Root AGENTS.md says commits must be signed and verified and should follow Conventional Commits.",
+      "Root AGENTS.md says the repo is a pnpm monorepo orchestrated with Turborepo; all packages are ESM TypeScript bundled with tsup.",
+      "Root AGENTS.md lists major packages: packages/chat, packages/adapter-*, packages/adapter-shared, packages/state-*, packages/integration-tests, apps/docs, and examples/nextjs-chat.",
+      "Root AGENTS.md defines core concepts: Chat, Adapter, StateAdapter, Thread, and Message.",
+      "Root AGENTS.md says thread IDs use {adapter}:{channel}:{thread}, with some adapters base64-encoding delimiter-containing IDs.",
+      "Root AGENTS.md says the webhook flow is platform webhook to /api/webhooks/{platform}, adapter verifies/parses, Chat locks and routes to handlers, and handlers receive Thread and Message.",
+      "Root AGENTS.md says messages use mdast as the canonical format, and each adapter FormatConverter implements toAst, fromAst, and renderPostable.",
+      "Root AGENTS.md says packages/chat/src/adapters/index.ts powers the zero-dependency chat/adapters subpath and must stay in sync with apps/docs/adapters.json; it must not import adapter packages or platform SDKs.",
+      "Root AGENTS.md says chat/adapters catalog entries should include package metadata and peer dependencies, describe env vars, credential modes, secrets, and constructor-only config, and keep official and vendor-official adapter metadata in sync with docs.",
+      "packages/chat/src/adapters/AGENTS.md says the chat/adapters public API shape includes ADAPTERS, ADAPTER_NAMES, AdapterSlug, CatalogAdapter, AdapterEnvSpec, EnvGroup, EnvVar, getAdapter, isAdapterSlug, listPlatformAdapters, listStateAdapters, listEnvVars, and getSecretEnvVars.",
+      "Root AGENTS.md says user-facing docs live in apps/docs/content/docs and behavior/API/env-var changes should update relevant docs in the same PR.",
+      "Root AGENTS.md and .github/CONTRIBUTING.md say Changesets with fixed versioning are used and every PR changing package behavior must include pnpm changeset.",
+      "Root AGENTS.md has an Ultracite code standards section saying pnpm check/fix run Ultracite/Biome and durable rules include preferring unknown over any, awaiting returned promises, function React components, throwing Error objects, no shipped console.log/debugger/alert, top-level regex literals, and never using eval() or assigning document.cookie.",
+      ".github/CONTRIBUTING.md says konsistent enforces public surface conventions for adapter and state packages.",
+      ".github/CONTRIBUTING.md says adapter packages export a ${Name}Adapter class, create${Name}Adapter factory, and ${Name}AdapterConfig type from consistent places.",
+      ".github/CONTRIBUTING.md says state packages export a ${Name}StateAdapter class, create${Name}State factory, and ${Name}StateAdapterOptions type.",
+      ".github/CONTRIBUTING.md says docs preview runs with pnpm --filter docs dev.",
+      "apps/docs/content/docs/contributing/testing.mdx says adapters are a trust boundary; high coverage is expected with unit tests for every public method and integration tests wiring Chat to Adapter to handler.",
+      "apps/docs/content/docs/contributing/testing.mdx says adapter tests should cover factory config/env fallback, thread ID encode/decode, webhook signature verification, message parsing, and format conversion.",
+      "apps/docs/content/docs/contributing/documenting.mdx says Vercel-maintained adapters follow a consistent README structure including install, quick start, env vars, config reference, platform setup, features, and license.",
+      "apps/docs/content/docs/contributing/documenting.mdx says adapter packages should include TSDoc on exported interfaces/factories and sample-messages.md with real platform webhook payloads.",
+      "apps/docs/content/docs/contributing/publishing.mdx says community adapters should be ESM, publish compiled dist only, define explicit exports, declare chat as a peer dependency, and avoid publishing under the reserved @chat-adapter/ scope.",
+      "apps/docs/content/docs/contributing/publishing.mdx says adapter listings in apps/docs/adapters.json should pin README refs to a commit or tag, and unpinned refs are rejected during PR review.",
+      "packages/adapter-slack/AGENTS.md says the Slack adapter connects Chat SDK bots to Slack through HTTP webhooks, optional Socket Mode, single-workspace or OAuth auth, Block Kit rendering, and native streaming.",
+      "packages/adapter-slack/AGENTS.md says Slack thread IDs use slack:{channelId}:{threadTs} and the adapter exposes encodeThreadId/decodeThreadId.",
+      "packages/adapter-slack/AGENTS.md and README.md say createSlackAdapter auto-detects Slack auth env vars, but when any auth-related field is passed explicitly, env fallback for remaining auth fields is disabled to prevent accidental auth mode mixing.",
+      "packages/adapter-slack/AGENTS.md says background work must use the adapter context waitUntil helper, not raw setTimeout or floating promises.",
+      "packages/adapter-slack/AGENTS.md says production code outside the adapter factory should not read process.env directly; new env vars must be threaded through SlackAdapterConfig.",
+      "packages/adapter-slack/sample-messages.md stores captured Slack payloads for replay and regression testing.",
+      "packages/adapter-slack/AGENTS.md says Slack integration tests and replay tests live under packages/integration-tests and use recorded fixtures without workspace credentials.",
+      "packages/adapter-github/AGENTS.md says the GitHub adapter connects bots to issue and pull-request comment threads, supports GitHub App auth, and uses issue/pr/review thread types.",
+      "packages/adapter-github/AGENTS.md says GitHub thread IDs use github:{owner}:{repo}:{type}:{number}.",
+      "packages/adapter-github/AGENTS.md says webhook redeliveries and duplicate events must be idempotent and X-GitHub-Delivery should be surfaced in metadata for debugging.",
+      "packages/adapter-github/AGENTS.md says GitHub App private keys are sensitive and must not be logged, embedded in fixtures, or written to sample messages.",
+      "packages/adapter-github/sample-messages.md stores captured GitHub payloads for replay and regression testing.",
+      "packages/state-redis/README.md describes @chat-adapter/state-redis as a Redis-backed StateAdapter intended for production, serverless, and multi-instance deployments.",
+      "packages/state-redis/AGENTS.md says @chat-adapter/state-redis is built on node-redis and covers subscriptions, distributed locks, key-value cache, lists, queues, queue dedupe, and automatic key prefixing for multi-tenant isolation.",
+      "packages/state-redis/README.md and AGENTS.md say Redis state can be configured with url, kvUrl, restUrl/restToken, or existing Redis clients, with lazy connection behavior.",
+      "packages/state-redis/AGENTS.md says most tests should use vi.fn Redis stubs and real Redis tests should only run when REDIS_URL is provided.",
+      "packages/create-chat-sdk/AGENTS.md says create-chat-sdk scaffolds Chat SDK bot projects; adapter metadata comes from chat/adapters and CLI-only scaffold behavior belongs in src/catalog/scaffold-spec.ts.",
+      "packages/create-chat-sdk/AGENTS.md, README.md, and ARCHITECTURE.md say the generated template is webhook-only and should not include pages, layouts, or client UI.",
+      "packages/create-chat-sdk/ARCHITECTURE.md says tests verify scaffold-spec coverage, generators for every catalog adapter, and an e2e path that scaffolds every catalog adapter through the real CLI."
+    ],
+    "expected_nodes": [
+      {
+        "id": "component.repository",
+        "kind": "component",
+        "description": "Repository-level component used as the about target for repo-wide identity, workflow, contribution, docs, release, and agent-guidance facts."
+      },
+      {
+        "id": "component.core_sdk",
+        "kind": "component",
+        "description": "Core Chat SDK package/concepts, including Chat, Adapter, StateAdapter, Thread, Message, mdast formatting, and webhook routing."
+      },
+      {
+        "id": "component.adapter_packages",
+        "kind": "component",
+        "description": "Adapter package family and shared adapter conventions for official, vendor-official, and community adapters."
+      },
+      {
+        "id": "component.docs_site",
+        "kind": "component",
+        "description": "User-facing docs site/content under apps/docs/content/docs and adapter listing metadata."
+      },
+      {
+        "id": "component.slack_adapter",
+        "kind": "component",
+        "description": "Slack adapter package and its package-level AGENTS.md contract."
+      },
+      {
+        "id": "component.github_adapter",
+        "kind": "component",
+        "description": "GitHub adapter package and its package-level AGENTS.md contract."
+      },
+      {
+        "id": "component.create_chat_sdk",
+        "kind": "component",
+        "description": "create-chat-sdk CLI package and scaffold contract."
+      },
+      {
+        "id": "flow.root_validation_workflow",
+        "kind": "flow",
+        "description": "Whole-repo setup, validation, lint/typecheck/test/build, and docs preview workflow from root curated docs."
+      },
+      {
+        "id": "flow.webhook_message_flow",
+        "kind": "flow",
+        "description": "Webhook-to-adapter-to-Chat routing flow from AGENTS.md."
+      },
+      {
+        "id": "flow.adapter_contribution_workflow",
+        "kind": "flow",
+        "description": "Adapter contribution workflow covering package shape, tests, docs, publishing, and adapter listing rules."
+      },
+      {
+        "id": "claim.repo_identity",
+        "kind": "claim",
+        "description": "Chat SDK is a unified TypeScript SDK for building cross-platform chat bots across Slack, Teams, Google Chat, Discord, Telegram, GitHub, Linear, and WhatsApp."
+      },
+      {
+        "id": "claim.repo_commands_validate",
+        "kind": "claim",
+        "description": "Root pnpm commands are captured, especially pnpm validate as the required final validation before declaring a task done."
+      },
+      {
+        "id": "claim.monorepo_architecture",
+        "kind": "claim",
+        "description": "The repo is a pnpm/Turborepo ESM TypeScript monorepo bundled with tsup, with major package families and apps documented."
+      },
+      {
+        "id": "claim.docs_update_rule",
+        "kind": "claim",
+        "description": "Behavior, public API, and environment variable changes should update relevant apps/docs/content/docs pages in the same PR."
+      },
+      {
+        "id": "claim.changeset_release_rule",
+        "kind": "claim",
+        "description": "Changesets use fixed versioning and package behavior changes require pnpm changeset."
+      },
+      {
+        "id": "claim.adapter_surface_conventions",
+        "kind": "claim",
+        "description": "Adapter and state packages must follow consistent public surface/export naming conventions enforced by konsistent."
+      },
+      {
+        "id": "claim.adapter_catalog_contract",
+        "kind": "claim",
+        "description": "packages/chat/src/adapters/index.ts powers chat/adapters, stays in sync with apps/docs/adapters.json, and must not import adapter packages or platform SDKs."
+      },
+      {
+        "id": "claim.adapter_testing_expectations",
+        "kind": "claim",
+        "description": "Adapters are a trust boundary and should test public methods, config/env fallback, thread ID roundtrip, webhook signatures, message parsing, and format conversion."
+      },
+      {
+        "id": "claim.adapter_documentation_expectations",
+        "kind": "claim",
+        "description": "Adapter docs should include README structure, env vars, config reference, platform setup, exported-interface TSDoc, and sample-messages.md with real payloads."
+      },
+      {
+        "id": "claim.adapter_publishing_contract",
+        "kind": "claim",
+        "description": "Community adapters should be ESM, publish dist, use explicit exports, declare chat as peer dependency, avoid @chat-adapter scope, and pin README refs for listings."
+      },
+      {
+        "id": "claim.slack_adapter_contract",
+        "kind": "claim",
+        "description": "Slack adapter package-level contract captures Slack webhook/socket/OAuth/Block Kit/streaming behavior and slack:{channelId}:{threadTs} thread IDs."
+      },
+      {
+        "id": "claim.github_adapter_contract",
+        "kind": "claim",
+        "description": "GitHub adapter package-level contract captures issue/PR/review comments, GitHub App auth, and thread ID/format quirks."
+      },
+      {
+        "id": "claim.create_chat_sdk_contract",
+        "kind": "claim",
+        "description": "create-chat-sdk scaffolds bot projects, uses chat/adapters as adapter metadata source, and keeps scaffold behavior in src/catalog/scaffold-spec.ts."
+      }
+    ],
+    "expected_edges": [
+      {
+        "id": "edge_repo_claims_about_repository",
+        "from": "repo-wide claims",
+        "to": "component.repository",
+        "description": "Repo-wide identity, command, monorepo, docs-update, and changeset claims are about component.repository."
+      },
+      {
+        "id": "edge_root_validation_touches_repository",
+        "from": "root validation workflow",
+        "to": "component.repository",
+        "description": "Root validation/setup workflow touches component.repository."
+      },
+      {
+        "id": "edge_webhook_flow_touches_core_and_adapters",
+        "from": "webhook message flow",
+        "to": "core SDK and adapter package components",
+        "description": "Webhook flow connects the core Chat SDK concepts with adapter packages."
+      },
+      {
+        "id": "edge_adapter_contribution_touches_adapter_docs",
+        "from": "adapter contribution workflow",
+        "to": "adapter packages and docs site components",
+        "description": "Adapter contribution workflow touches adapter packages and docs site/listing rules."
+      },
+      {
+        "id": "edge_package_claims_about_narrow_components",
+        "from": "Slack/GitHub/create-chat-sdk claims",
+        "to": "their package-specific components",
+        "description": "Package-specific contracts are about Slack adapter, GitHub adapter, or create-chat-sdk components rather than only component.repository."
+      },
+      {
+        "id": "edge_claims_not_disconnected",
+        "from": "important claims",
+        "to": "relevant components or flows",
+        "description": "Important claims are graph-linked to relevant components or flows instead of left disconnected."
+      }
+    ],
+    "quality_rules": {
+      "noisy_structure_nodes": "Components and flows that do not help curated-doc repo orientation, such as one node per adapter package, every docs page, every package.json, generic source-code components, generated/dependency folders, or single-helper-function flows. Do not count the required repository/core/adapter/docs/Slack/GitHub/create-chat-sdk components as noisy.",
+      "bad_claims": "Claims that are wrong, unsupported by any inspected tracked Markdown/MDX or source anchor, raw copied prose, too vague, duplicated, or misplaced. Do not mark package-specific details bad just because they are deep in the repo when they are durable contracts from package AGENTS.md, README.md, sample-messages.md, ARCHITECTURE.md, or docs Markdown/MDX and are attached to package-specific components. Do not mark a claim bad only because its truth field says code_verified when the same content is documented in tracked Markdown/MDX. Mark low-level implementation details bad when they appear to come only from source-code inspection and are not framed by curated docs as durable guidance. Mark repo-level claims bad if they are only about package-specific Slack/GitHub/create-chat-sdk behavior. Mark package-specific claims bad if they are attached only to component.repository.",
+      "bad_anchors": "Anchors that point to fake paths, generated output, dependency folders, .git, or a vague repo root without a strong reason. Real curated docs such as README.md, AGENTS.md, .github/CONTRIBUTING.md, apps/docs/content/docs, and package AGENTS.md files are good anchors.",
+      "depth_violation": "The proposal is clearly too deep for bootstrap because it maps source packages/files/functions or stores code-derived implementation trivia that is not documented as durable guidance. Deep Markdown/MDX ingestion is not a depth violation by itself; internal package docs may contain high-value durable memory. A code_verified truth label alone is not enough to establish a depth violation.",
+      "weak_graph_linking": "The proposal creates nodes but does not meaningfully connect repo-wide claims to component.repository, flows to touched components, and package-specific claims to narrower components."
+    }
+  }
+}

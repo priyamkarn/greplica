@@ -6,6 +6,7 @@ import type { Component, Flow, Source } from "./schema.js";
 import { GraphContextBuilder } from "./graph-context/context-builder.js";
 import { graphContextConfig, type GraphContextConfig } from "./graph-context/config.js";
 import type { EmbeddingStatus, GraphContextResult } from "./graph-context/types.js";
+import { buildGraphViewHtml } from "./graph-view/build-graph-view.js";
 import { defaultDatabasePath, openDatabase } from "../storage/sqlite/db.js";
 import type { SqliteRepository } from "../storage/sqlite/repository.js";
 import { SqliteRepository as SqliteKnowledgeGraphRepository } from "../storage/sqlite/repository.js";
@@ -80,13 +81,35 @@ export class KnowledgeGraphService {
     };
   }
 
+  requireRepo(input: RepoRef): InitRepoResult {
+    const repo = this.repository.requireRepo(input);
+    const main = this.repository.requireMainScope(repo.id);
+    const working = this.repository.requireWorkingScope(repo.id);
+
+    return {
+      repo_id: repo.id,
+      main_scope_id: main.id,
+      working_scope_id: working.id,
+      database_path: defaultDatabasePath(),
+      created: false,
+    };
+  }
+
   readGraph(input: RepoRef): GraphReadResult {
-    const initialized = this.ensureInitialized(input);
+    const initialized = this.requireRepo(input);
     return this.repository.readGraphView(initialized.repo_id);
   }
 
+  buildGraphView(input: RepoRef): string {
+    const initialized = this.requireRepo(input);
+    const graph = this.repository.readGraphView(initialized.repo_id);
+    const provenance = this.repository.readClaimProvenance(initialized.repo_id);
+    const supersededClaims = this.repository.readSupersededClaims(initialized.repo_id);
+    return buildGraphViewHtml(graph, provenance, supersededClaims, { repoName: input.repo_name });
+  }
+
   async contextGraph(input: RepoRef, query: string): Promise<GraphContextResult> {
-    const initialized = this.ensureInitialized(input);
+    const initialized = this.requireRepo(input);
     return this.contextBuilder.build(initialized.repo_id, this.repository.readGraphView(initialized.repo_id), query, {
       config: this.contextConfig,
       warnOnCreatedEmbeddings: true,
@@ -94,7 +117,7 @@ export class KnowledgeGraphService {
   }
 
   validateProposal(input: RepoRef, proposal: unknown): ProposalValidationResult {
-    this.ensureInitialized(input);
+    this.requireRepo(input);
     return validateProposal(normalizeProposal(proposal, this.repository), this.repository);
   }
 
@@ -105,7 +128,7 @@ export class KnowledgeGraphService {
       throw new Error(`Proposal is invalid:\n${validation.errors.map((error) => `- ${error}`).join("\n")}`);
     }
 
-    const initialized = this.ensureInitialized(input);
+    const initialized = this.requireRepo(input);
     const working = this.repository.requireWorkingScope(initialized.repo_id);
     const memoryCommit = this.repository.createMemoryCommit({
       scope_id: working.id,
@@ -134,9 +157,6 @@ export class KnowledgeGraphService {
     };
   }
 
-  private ensureInitialized(input: RepoRef): InitRepoResult {
-    return this.initRepo(input);
-  }
 }
 
 export function createLocalKnowledgeGraphService(config: GraphContextConfig = graphContextConfig): KnowledgeGraphService {

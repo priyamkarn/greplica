@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit",
     "eval:bootstrap-current": "npm run build && node dist/evals/cases/bootstrap-current-repo-at-8038fe8/run.js",
     "eval:coding-proposal-apply-atomicity": "npm run build && node dist/evals/cases/coding-proposal-apply-atomicity-at-d6ebf80/run.js",
+    "eval:curated-doc-bootstrap-vercel-chat": "npm run build && node dist/evals/cases/curated-doc-bootstrap-vercel-chat-at-f3de128/run.js",
     "eval:search-current": "npm run build && node dist/evals/cases/search-current-repo-at-8038fe8/run.js",
     "eval:update-working-memory-source-evidence": "npm run build && node dist/evals/cases/update-working-memory-source-evidence-at-0438915/run.js"
   },

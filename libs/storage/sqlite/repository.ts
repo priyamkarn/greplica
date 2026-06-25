@@ -68,6 +68,12 @@ export interface InsertGraphObjectEmbeddingInput {
   embedding: Buffer;
 }
 
+export interface ClaimProvenanceRecord {
+  claim_id: string;
+  created_at: string;
+  memory_commit_id: string;
+}
+
 export class SqliteRepository {
   constructor(private readonly db: Database.Database) {}
 
@@ -101,10 +107,14 @@ export class SqliteRepository {
     return this.db.prepare("SELECT * FROM repos WHERE root_path = ?").get(rootPath) as RepoRecord | undefined;
   }
 
-  requireRepo(remoteUrl: string): RepoRecord {
-    const repo = this.getRepoByRemote(remoteUrl);
+  getRepo(input: UpsertRepoInput): RepoRecord | undefined {
+    return this.findRepo(input)?.repo;
+  }
+
+  requireRepo(input: UpsertRepoInput): RepoRecord {
+    const repo = this.getRepo(input);
     if (!repo) {
-      throw new Error(`Repo memory is not ready for ${remoteUrl}. Run 'greplica doctor' to diagnose setup.`);
+      throw new Error("Greplica is not installed for this repo. Run greplica install --platform <codex|claude|opencode> --embedding local from the repo you want to use.");
     }
     return repo;
   }
@@ -178,8 +188,43 @@ export class SqliteRepository {
     const scope = this.db
       .prepare("SELECT * FROM graph_scopes WHERE repo_id = ? AND kind = 'working' AND name = 'working'")
       .get(repoId) as GraphScope | undefined;
-    if (!scope) throw new Error("Working scope is missing. Run 'greplica doctor' to diagnose setup.");
+    if (!scope) throw new Error("Working scope is missing. Run 'greplica install --platform <codex|claude|opencode> --embedding local' from this repo.");
     return scope;
+  }
+
+  requireMainScope(repoId: string): GraphScope {
+    const scope = this.db
+      .prepare("SELECT * FROM graph_scopes WHERE repo_id = ? AND kind = 'main' ORDER BY created_at LIMIT 1")
+      .get(repoId) as GraphScope | undefined;
+    if (!scope) throw new Error("Main scope is missing. Run 'greplica install --platform <codex|claude|opencode> --embedding local' from this repo.");
+    return scope;
+  }
+
+  readSupersededClaims(repoId: string): Claim[] {
+    const scopeIds = this.currentScopeIds(repoId);
+    const memberships = this.membershipsForScopes(scopeIds);
+    const rawEdges = this.loadEdges(selectIds(memberships, "edge"));
+    const supersededIds = new Set(
+      rawEdges
+        .filter((edge) => edge.kind === "supersedes" && edge.to_type === "claim")
+        .map((edge) => edge.to_id),
+    );
+    const claimIds = selectIds(memberships, "claim").filter((id) => supersededIds.has(id));
+    return this.loadClaims(claimIds);
+  }
+
+  readClaimProvenance(repoId: string): ClaimProvenanceRecord[] {
+    return this.db
+      .prepare(
+        `SELECT gm.subject_id AS claim_id, mc.created_at AS created_at, gm.memory_commit_id AS memory_commit_id
+         FROM graph_memberships gm
+         JOIN memory_commits mc ON mc.id = gm.memory_commit_id
+         JOIN graph_scopes gs ON gs.id = gm.scope_id
+         WHERE gm.subject_type = 'claim'
+           AND gs.repo_id = ?
+           AND gs.kind IN ('main', 'working')`,
+      )
+      .all(repoId) as ClaimProvenanceRecord[];
   }
 
   readGraphView(repoId: string): {
