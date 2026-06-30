@@ -1,5 +1,6 @@
 import type { InstallPlatform } from "../paths.js";
 import { claudeInstaller } from "./claude.js";
+import { copilotInstaller } from "./copilot.js";
 import { codexInstaller } from "./codex.js";
 import { droidInstaller } from "./droid.js";
 import { opencodeInstaller } from "./opencode.js";
@@ -9,6 +10,7 @@ import type { HookInstallResult, PlatformInstallContext, PlatformInstaller, Plat
 const platformInstallers: Partial<Record<InstallPlatform, PlatformInstaller>> = {
   claude: claudeInstaller,
   codex: codexInstaller,
+  copilot: copilotInstaller,
   opencode: opencodeInstaller,
   openhands: openhandsInstaller,
   "factory-droid": droidInstaller,

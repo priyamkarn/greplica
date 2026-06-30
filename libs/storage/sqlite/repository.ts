@@ -116,7 +116,7 @@ export class SqliteRepository {
   requireRepo(input: UpsertRepoInput): RepoRecord {
     const repo = this.getRepo(input);
     if (!repo) {
-      throw new Error("Greplica is not installed for this repo. Run greplica install --platform <codex|claude|opencode> --embedding local from the repo you want to use.");
+      throw new Error("Greplica is not installed for this repo. Run greplica install --platform <codex|claude|copilot|opencode> --embedding local from the repo you want to use.");
     }
     return repo;
   }
@@ -190,7 +190,7 @@ export class SqliteRepository {
     const scope = this.db
       .prepare("SELECT * FROM graph_scopes WHERE repo_id = ? AND kind = 'working' AND name = 'working'")
       .get(repoId) as GraphScope | undefined;
-    if (!scope) throw new Error("Working scope is missing. Run 'greplica install --platform <codex|claude|opencode> --embedding local' from this repo.");
+    if (!scope) throw new Error("Working scope is missing. Run 'greplica install --platform <codex|claude|copilot|opencode> --embedding local' from this repo.");
     return scope;
   }
 
@@ -198,7 +198,7 @@ export class SqliteRepository {
     const scope = this.db
       .prepare("SELECT * FROM graph_scopes WHERE repo_id = ? AND kind = 'main' ORDER BY created_at LIMIT 1")
       .get(repoId) as GraphScope | undefined;
-    if (!scope) throw new Error("Main scope is missing. Run 'greplica install --platform <codex|claude|opencode> --embedding local' from this repo.");
+    if (!scope) throw new Error("Main scope is missing. Run 'greplica install --platform <codex|claude|copilot|opencode> --embedding local' from this repo.");
     return scope;
   }
 

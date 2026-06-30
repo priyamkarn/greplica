@@ -38,7 +38,7 @@ Then run:
 
 ```bash
 npm install -g greplica
-greplica install --platform <codex|claude|opencode|openhands|factory-droid> --embedding local <mapped-hook-and-memory-flags>
+greplica install --platform <codex|claude|copilot|opencode|openhands|factory-droid> --embedding local <mapped-hook-and-memory-flags>
 ```
 
 Use the platform matching this agent. Do not manually copy skills. After installation, do not echo the full installer output or repeat its next steps.
@@ -51,7 +51,7 @@ Then bootstrap shallow memory for this repo:
 
 If I chose "Yes, recent sessions", analyze prior sessions:
 - Find recent prior sessions for this same repo and platform, preferring work from the last 1-2 days.
-- Candidate locations: Codex `~/.codex/sessions/**/*.jsonl`; Claude Code `~/.claude/projects/**/*.jsonl`.
+- Candidate locations: Codex `~/.codex/sessions/**/*.jsonl`; Claude Code `~/.claude/projects/**/*.jsonl`; GitHub Copilot CLI paths from `Stop` hook `transcript_path` values or `$COPILOT_HOME/session-state`.
 - Do not require transcript metadata `cwd` to equal the current checkout path. Users may use worktrees, renamed folders, or multiple checkouts of the same repo.
 - Treat a transcript as same-repo when its metadata `cwd` is the current path, or when that `cwd` still exists and Git reports the same `remote.origin.url` or same normalized repo identity as the current repo. If the old path no longer exists, use transcript cwd text, repo name, branch, and recent session content as weaker matching evidence.
 - For OpenCode, tell me transcript backfill is not supported yet and skip this step.
@@ -60,7 +60,7 @@ If I chose "Yes, recent sessions", analyze prior sessions:
 - Do not ask for confirmation. Continue with a temporary bundle path:
 
 ```bash
-greplica transcript bundle --platform <codex-or-claude> --file <path-1> [--file <path-2>] [--file <path-3>] --out <greplica-transcript-backfill.md>
+greplica transcript bundle --platform <codex-or-claude-or-copilot> --file <path-1> [--file <path-2>] [--file <path-3>] --out <greplica-transcript-backfill.md>
 ```
 
 - Then use the `greplica-fast-session-bootstrap` skill on `<greplica-transcript-backfill.md>` and include its final value summary naturally in the final answer.
