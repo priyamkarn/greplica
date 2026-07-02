@@ -249,13 +249,17 @@ async function runInstallCommand(args: string[]): Promise<void> {
 
 function runGraphReadCommand(_args: string[]): void {
   const { repo, service } = createCommandContext();
-  const graph = service.readGraph(repo);
-  console.log("Current graph view: main + working");
-  printSection("Components", graph.components, (item) => `${named(item)} ${anchor(item)}`.trim());
-  printSection("Flows", graph.flows, named);
-  printSection("Claims", graph.claims, (item) => `${field(item, "kind")}: ${field(item, "text")}`);
-  printSection("Sources", graph.sources, (item) => `${field(item, "kind")}: ${field(item, "title") || field(item, "ref")}`);
-  printSection("Edges", graph.edges, (item) => `${field(item, "from_type")}:${field(item, "from_id")} -[${field(item, "kind")}]-> ${field(item, "to_type")}:${field(item, "to_id")}`);
+  try {
+    const graph = service.readGraph(repo);
+    console.log("Current graph view: main + working");
+    printSection("Components", graph.components, (item) => `${named(item)} ${anchor(item)}`.trim());
+    printSection("Flows", graph.flows, named);
+    printSection("Claims", graph.claims, (item) => `${field(item, "kind")}: ${field(item, "text")}`);
+    printSection("Sources", graph.sources, (item) => `${field(item, "kind")}: ${field(item, "title") || field(item, "ref")}`);
+    printSection("Edges", graph.edges, (item) => `${field(item, "from_type")}:${field(item, "from_id")} -[${field(item, "kind")}]-> ${field(item, "to_type")}:${field(item, "to_id")}`);
+  } finally {
+    service.close();
+  }
 }
 
 async function runGraphContextCommand(args: string[]): Promise<void> {
@@ -263,83 +267,107 @@ async function runGraphContextCommand(args: string[]): Promise<void> {
   const query = args.filter((arg) => arg !== "--debug").join(" ").trim();
   if (query.length === 0) throw new Error(usage("graphContext"));
   const { repo, service } = createCommandContext();
-  const result = await service.contextGraph(repo, query);
-  if (output === "debug") {
-    console.log(JSON.stringify(result, null, 2));
-  } else {
-    console.log(renderGraphContextMarkdown(result));
+  try {
+    const result = await service.contextGraph(repo, query);
+    if (output === "debug") {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(renderGraphContextMarkdown(result));
+    }
+  } finally {
+    service.close();
   }
 }
 
 async function runGraphAuditAnchorsCommand(_args: string[]): Promise<void> {
   const { repo, service } = createCommandContext();
-  const result = await service.auditCodeAnchors(repo);
-  printAnchorAudit(result);
-  if (anchorAuditIssueCount(result) > 0) process.exitCode = 1;
+  try {
+    const result = await service.auditCodeAnchors(repo);
+    printAnchorAudit(result);
+    if (anchorAuditIssueCount(result) > 0) process.exitCode = 1;
+  } finally {
+    service.close();
+  }
 }
 
 function runGraphExportCommand(args: string[]): void {
   const outputDir = requireFile(args[0], usage("graphExport"));
   const { repo, service } = createCommandContext();
-  const files = buildGraphFolderExport(service.readGraph(repo));
-  writeGraphFolderExport(outputDir, files);
-  console.log(`Exported current graph view to ${outputDir}`);
-  console.log(`Files: ${files.length}`);
+  try {
+    const files = buildGraphFolderExport(service.readGraph(repo));
+    writeGraphFolderExport(outputDir, files);
+    console.log(`Exported current graph view to ${outputDir}`);
+    console.log(`Files: ${files.length}`);
+  } finally {
+    service.close();
+  }
 }
 
 function runGraphViewCommand(args: string[]): void {
   const options = parseGraphViewArgs(args);
   const { repo, service } = createCommandContext();
-  const graph = service.readGraph(repo);
-  if (graph.components.length === 0) {
-    console.log("No components to visualise. Bootstrap memory first.");
-    process.exitCode = 1;
-    return;
-  }
+  try {
+    const graph = service.readGraph(repo);
+    if (graph.components.length === 0) {
+      console.log("No components to visualise. Bootstrap memory first.");
+      process.exitCode = 1;
+      return;
+    }
 
-  const outputPath = options.outputPath ?? defaultGraphViewOutputPath(repo.repo_name);
-  mkdirSync(dirname(outputPath), { recursive: true });
-  const html = service.buildGraphView(repo);
-  writeFileSync(outputPath, html, "utf8");
-  console.log(`Wrote graph view to ${outputPath}`);
+    const outputPath = options.outputPath ?? defaultGraphViewOutputPath(repo.repo_name);
+    mkdirSync(dirname(outputPath), { recursive: true });
+    const html = service.buildGraphView(repo);
+    writeFileSync(outputPath, html, "utf8");
+    console.log(`Wrote graph view to ${outputPath}`);
 
-  if (!options.noOpen) {
-    openInBrowser(outputPath);
+    if (!options.noOpen) {
+      openInBrowser(outputPath);
+    }
+  } finally {
+    service.close();
   }
 }
 
 async function runProposalValidateCommand(args: string[]): Promise<void> {
   const file = requireFile(args[0], usage("proposalValidate"));
   const { repo, service } = createCommandContext();
-  const proposal = readProposal(file);
-  const result = await service.validateProposal(repo, proposal);
-  if (result.valid) {
-    console.log("Proposal is valid.");
-    return;
+  try {
+    const proposal = readProposal(file);
+    const result = await service.validateProposal(repo, proposal);
+    if (result.valid) {
+      console.log("Proposal is valid.");
+      return;
+    }
+    console.log("Proposal is invalid:");
+    for (const error of result.errors) console.log(`- ${error}`);
+    process.exitCode = 1;
+  } finally {
+    service.close();
   }
-  console.log("Proposal is invalid:");
-  for (const error of result.errors) console.log(`- ${error}`);
-  process.exitCode = 1;
 }
 
 async function runProposalApplyCommand(args: string[]): Promise<void> {
   const file = requireFile(args[0], usage("proposalApply"));
   const { repo, service } = createCommandContext();
-  const installed = service.requireRepo(repo);
-  const proposal = readProposal(file);
-  const result = await service.applyProposal(repo, proposal);
-  console.log("Applied proposal to working memory.");
-  console.log(`Memory commit: ${result.memory_commit_id}`);
-  console.log(`Scope: ${result.scope_id}`);
-  console.log(`Components: ${result.created.components}`);
-  console.log(`Flows: ${result.created.flows}`);
-  console.log(`Claims: ${result.created.claims}`);
-  console.log(`Sources: ${result.created.sources}`);
-  console.log(`Edges: ${result.created.edges}`);
-  console.log(`Embeddings checked: ${result.embedding_status.checked_objects}`);
-  console.log(`Embeddings created: ${result.embedding_status.created}`);
-  console.log(`Embeddings reused: ${result.embedding_status.reused}`);
-  markProposalApplyMemoryUpdated(installed.repo_id, proposal);
+  try {
+    const installed = service.requireRepo(repo);
+    const proposal = readProposal(file);
+    const result = await service.applyProposal(repo, proposal);
+    console.log("Applied proposal to working memory.");
+    console.log(`Memory commit: ${result.memory_commit_id}`);
+    console.log(`Scope: ${result.scope_id}`);
+    console.log(`Components: ${result.created.components}`);
+    console.log(`Flows: ${result.created.flows}`);
+    console.log(`Claims: ${result.created.claims}`);
+    console.log(`Sources: ${result.created.sources}`);
+    console.log(`Edges: ${result.created.edges}`);
+    console.log(`Embeddings checked: ${result.embedding_status.checked_objects}`);
+    console.log(`Embeddings created: ${result.embedding_status.created}`);
+    console.log(`Embeddings reused: ${result.embedding_status.reused}`);
+    markProposalApplyMemoryUpdated(installed.repo_id, proposal);
+  } finally {
+    service.close();
+  }
 }
 
 function printAnchorAudit(result: ClaimAnchorAuditResult): void {
@@ -436,18 +464,22 @@ function hookGuidanceOutput(platform: InstallPlatform, additionalContext: string
 function runSessionMarkMemoryCurrent(args: string[]): void {
   const sessionRef = parseRequiredOption(args, "--session-ref", usage("sessionMarkMemoryCurrent"));
   const { repo, service } = createCommandContext();
-  const installed = service.requireRepo(repo);
-  const db = openDatabase();
   try {
-    const marked = markMemoryCurrentFromSessionRef(new HookSessionStore(db), installed.repo_id, sessionRef);
-    if (marked) {
-      console.log("Marked session memory current.");
-      return;
+    const installed = service.requireRepo(repo);
+    const db = openDatabase();
+    try {
+      const marked = markMemoryCurrentFromSessionRef(new HookSessionStore(db), installed.repo_id, sessionRef);
+      if (marked) {
+        console.log("Marked session memory current.");
+        return;
+      }
+      console.log(`No tracked session matched ${sessionRef}`);
+      process.exitCode = 1;
+    } finally {
+      db.close();
     }
-    console.log(`No tracked session matched ${sessionRef}`);
-    process.exitCode = 1;
   } finally {
-    db.close();
+    service.close();
   }
 }
 
@@ -534,48 +566,52 @@ async function runDoctor(args: string[]): Promise<void> {
     return;
   }
 
-  let ready = true;
-  console.log("Greplica doctor");
-  console.log(`Repo: ${context.repo.repo_name}`);
-  console.log(`Repo root: ${context.repo.repo_root ?? ""}`);
-  console.log(`Remote: ${context.repo.remote_url ?? "none"}`);
-  console.log(`Default branch: ${context.repo.default_branch}`);
-
   try {
-    const result = context.service.requireRepo(context.repo);
-    console.log(`Database: ${result.database_path}`);
-    console.log("Memory state: ready");
-    console.log(`Main scope: ${result.main_scope_id}`);
-    console.log(`Working scope: ${result.working_scope_id}`);
-  } catch (error: unknown) {
-    ready = false;
-    const message = error instanceof Error ? error.message : String(error);
-    console.log(message.startsWith("Greplica is not installed") ? "Memory state: not installed" : "Memory state: failed");
-    console.log(message);
-  }
+    let ready = true;
+    console.log("Greplica doctor");
+    console.log(`Repo: ${context.repo.repo_name}`);
+    console.log(`Repo root: ${context.repo.repo_root ?? ""}`);
+    console.log(`Remote: ${context.repo.remote_url ?? "none"}`);
+    console.log(`Default branch: ${context.repo.default_branch}`);
 
-  console.log(`Config: ${displayConfigPath()}`);
-  printEmbeddingConfig(context.config.embedding);
-  printSessionConfig(context.config.session);
-
-  if (context.config.embedding.provider === "openai") {
-    const source = envVarSource("OPENAI_API_KEY", context.env);
-    if (source === undefined) {
+    try {
+      const result = context.service.requireRepo(context.repo);
+      console.log(`Database: ${result.database_path}`);
+      console.log("Memory state: ready");
+      console.log(`Main scope: ${result.main_scope_id}`);
+      console.log(`Working scope: ${result.working_scope_id}`);
+    } catch (error: unknown) {
       ready = false;
-      console.log("OPENAI_API_KEY: missing");
-      console.log("Set OPENAI_API_KEY in the shell, target-root .env.local, or target-root .env.");
-    } else if (source.kind === "environment") {
-      console.log("OPENAI_API_KEY: found in environment");
-    } else {
-      console.log(`OPENAI_API_KEY: found in ${source.path}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(message.startsWith("Greplica is not installed") ? "Memory state: not installed" : "Memory state: failed");
+      console.log(message);
     }
-  }
 
-  if (args.includes("--check-embeddings") || args.includes("--check-openai")) {
-    ready = (await checkEmbeddings(context.config.embedding)) && ready;
-  }
+    console.log(`Config: ${displayConfigPath()}`);
+    printEmbeddingConfig(context.config.embedding);
+    printSessionConfig(context.config.session);
 
-  process.exitCode = ready ? 0 : 1;
+    if (context.config.embedding.provider === "openai") {
+      const source = envVarSource("OPENAI_API_KEY", context.env);
+      if (source === undefined) {
+        ready = false;
+        console.log("OPENAI_API_KEY: missing");
+        console.log("Set OPENAI_API_KEY in the shell, target-root .env.local, or target-root .env.");
+      } else if (source.kind === "environment") {
+        console.log("OPENAI_API_KEY: found in environment");
+      } else {
+        console.log(`OPENAI_API_KEY: found in ${source.path}`);
+      }
+    }
+
+    if (args.includes("--check-embeddings") || args.includes("--check-openai")) {
+      ready = (await checkEmbeddings(context.config.embedding)) && ready;
+    }
+
+    process.exitCode = ready ? 0 : 1;
+  } finally {
+    context.service.close();
+  }
 }
 
 async function runEmbeddingsPrewarm(args: string[]): Promise<void> {

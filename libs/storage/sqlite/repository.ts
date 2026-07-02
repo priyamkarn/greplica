@@ -79,6 +79,10 @@ export interface ClaimProvenanceRecord {
 export class SqliteRepository {
   constructor(private readonly db: Database.Database) {}
 
+  close(): void {
+    this.db.close();
+  }
+
   upsertRepo(input: UpsertRepoInput): { repo: RepoRecord; created: boolean } {
     const existing = this.findRepo(input);
     if (existing) return { repo: this.updateRepo(existing.repo, input, existing.matchedBy), created: false };
