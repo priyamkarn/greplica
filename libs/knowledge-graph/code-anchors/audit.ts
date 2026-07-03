@@ -13,6 +13,7 @@ export async function auditClaimCodeAnchors(
     missing_symbols: [],
     ambiguous_symbols: [],
     unsupported_languages: [],
+    stale_content: [],
   };
 
   for (const claim of claims) {
@@ -23,7 +24,7 @@ export async function auditClaimCodeAnchors(
     }
 
     const resolvedAnchors = await resolver.resolveMany(repoRoot, claim.code_anchors);
-    for (const anchor of resolvedAnchors) {
+    for (const [index, anchor] of resolvedAnchors.entries()) {
       switch (anchor.status) {
         case "missing_file":
           result.missing_files.push({ claim_id: claim.id, anchor, status: "missing_file" });
@@ -37,7 +38,16 @@ export async function auditClaimCodeAnchors(
         case "unsupported_language":
           result.unsupported_languages.push({ claim_id: claim.id, anchor, status: "unsupported_language" });
           break;
-        case "resolved":
+        case "resolved": {
+          // The symbol still resolves unambiguously, but compare its current
+          // content hash against the one recorded when the claim was
+          // written: same symbol name, possibly different implementation.
+          const recordedHash = claim.code_anchors[index]?.content_hash;
+          if (recordedHash !== undefined && anchor.content_hash !== undefined && anchor.content_hash !== recordedHash) {
+            result.stale_content.push({ claim_id: claim.id, anchor, status: "stale_content" });
+          }
+          break;
+        }
         case "file_only":
           break;
       }

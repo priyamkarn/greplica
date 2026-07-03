@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { extname, join, normalize, relative } from "node:path";
 import Parser from "web-tree-sitter";
@@ -120,11 +121,7 @@ export class CodeAnchorResolver {
     if (symbols === undefined) {
       const fallback = fallbackSymbolForFile(filePath, anchor.symbol);
       if (fallback !== undefined) {
-        return {
-          ...anchor,
-          start_line: fallback.start_line,
-          status: "resolved",
-        };
+        return buildResolvedAnchor(anchor, filePath, fallback);
       }
       return { ...anchor, status: "unsupported_language" };
     }
@@ -133,11 +130,7 @@ export class CodeAnchorResolver {
     if (matches.length === 0) {
       const fallback = fallbackSymbolForFile(filePath, anchor.symbol);
       if (fallback !== undefined) {
-        return {
-          ...anchor,
-          start_line: fallback.start_line,
-          status: "resolved",
-        };
+        return buildResolvedAnchor(anchor, filePath, fallback);
       }
       return { ...anchor, status: "missing_symbol" };
     }
@@ -145,13 +138,7 @@ export class CodeAnchorResolver {
       return { ...anchor, status: "ambiguous_symbol" };
     }
 
-    const match = matches[0];
-    return {
-      ...anchor,
-      start_line: match.start_line,
-      end_line: match.end_line,
-      status: "resolved",
-    };
+    return buildResolvedAnchor(anchor, filePath, matches[0]);
   }
 
   async resolveMany(repoRoot: string | undefined, anchors: ClaimCodeAnchor[] | undefined): Promise<ResolvedCodeAnchor[]> {
@@ -203,6 +190,36 @@ export class CodeAnchorResolver {
       locateFile: () => require.resolve("web-tree-sitter/tree-sitter.wasm"),
     });
     return this.parserReady;
+  }
+}
+
+function buildResolvedAnchor(
+  anchor: ClaimCodeAnchor,
+  filePath: string,
+  candidate: SymbolCandidate,
+): ResolvedCodeAnchor {
+  return {
+    ...anchor,
+    start_line: candidate.start_line,
+    end_line: candidate.end_line,
+    content_hash: hashLines(filePath, candidate.start_line, candidate.end_line),
+    status: "resolved",
+  };
+}
+
+// Hashes the exact source text currently backing a resolved symbol so callers
+// can later detect drift: the symbol may still exist and still be
+// unambiguous, but its implementation may have changed underneath a claim
+// that was written against the old text. Returns undefined (rather than
+// throwing) if the file can't be read, since a hashing failure shouldn't
+// block anchor resolution itself.
+function hashLines(filePath: string, startLine: number, endLine: number): string | undefined {
+  try {
+    const lines = readFileSync(filePath, "utf8").split(/\r?\n/);
+    const slice = lines.slice(Math.max(0, startLine - 1), Math.max(startLine, endLine)).join("\n");
+    return createHash("sha256").update(slice).digest("hex");
+  } catch {
+    return undefined;
   }
 }
 

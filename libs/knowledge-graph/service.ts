@@ -8,6 +8,7 @@ import { graphContextConfig, type GraphContextConfig } from "./graph-context/con
 import type { EmbeddingStatus, GraphContextResult } from "./graph-context/types.js";
 import { buildGraphViewHtml } from "./graph-view/build-graph-view.js";
 import { auditClaimCodeAnchors } from "./code-anchors/audit.js";
+import { CodeAnchorResolver } from "./code-anchors/resolver.js";
 import type { ClaimAnchorAuditResult } from "./code-anchors/types.js";
 import { defaultDatabasePath, openDatabase } from "../storage/sqlite/db.js";
 import type { SqliteRepository } from "../storage/sqlite/repository.js";
@@ -57,6 +58,7 @@ export class KnowledgeGraphService {
     private readonly repository: SqliteRepository,
     private readonly contextConfig: GraphContextConfig = graphContextConfig,
     private readonly contextBuilder = new GraphContextBuilder(repository),
+    private readonly anchorResolver = new CodeAnchorResolver(),
   ) {}
 
   initRepo(input: RepoRef): InitRepoResult {
@@ -122,7 +124,11 @@ export class KnowledgeGraphService {
 
   async auditCodeAnchors(input: RepoRef): Promise<ClaimAnchorAuditResult> {
     const initialized = this.requireRepo(input);
-    return auditClaimCodeAnchors(input.repo_root, this.repository.readGraphView(initialized.repo_id).claims);
+    return auditClaimCodeAnchors(
+      input.repo_root,
+      this.repository.readGraphView(initialized.repo_id).claims,
+      this.anchorResolver,
+    );
   }
 
   async validateProposal(input: RepoRef, proposal: unknown): Promise<ProposalValidationResult> {
@@ -132,7 +138,7 @@ export class KnowledgeGraphService {
     if (!validation.valid) return validation;
 
     const anchorErrors = anchorAuditErrors(
-      await auditClaimCodeAnchors(input.repo_root, normalizedProposal.creates.claims ?? []),
+      await auditClaimCodeAnchors(input.repo_root, normalizedProposal.creates.claims ?? [], this.anchorResolver),
     );
     if (anchorErrors.length === 0) return validation;
 
@@ -148,6 +154,13 @@ export class KnowledgeGraphService {
     if (!validation.valid) {
       throw new Error(`Proposal is invalid:\n${validation.errors.map((error) => `- ${error}`).join("\n")}`);
     }
+
+    // Record a content fingerprint for every resolvable anchor at the moment
+    // the claim is written, so a later `graph audit anchors` can tell whether
+    // the anchored code has changed since. The resolver's file/symbol cache
+    // is shared with validateProposal's audit above, so this doesn't re-parse
+    // files that were just resolved.
+    await this.attachAnchorContentHashes(input.repo_root, normalizedProposal.creates.claims);
 
     const initialized = this.requireRepo(input);
     const working = this.repository.requireWorkingScope(initialized.repo_id);
@@ -176,6 +189,20 @@ export class KnowledgeGraphService {
         edges: normalizedProposal.creates.edges?.length ?? 0,
       },
     };
+  }
+
+  private async attachAnchorContentHashes(repoRoot: string | undefined, claims: Claim[] | undefined): Promise<void> {
+    for (const claim of claims ?? []) {
+      if (claim.code_anchors === undefined || claim.code_anchors.length === 0) continue;
+
+      const resolved = await this.anchorResolver.resolveMany(repoRoot, claim.code_anchors);
+      claim.code_anchors = claim.code_anchors.map((anchor, index) => {
+        const contentHash = resolved[index]?.content_hash;
+        return resolved[index]?.status === "resolved" && contentHash !== undefined
+          ? { ...anchor, content_hash: contentHash }
+          : anchor;
+      });
+    }
   }
 
 }
