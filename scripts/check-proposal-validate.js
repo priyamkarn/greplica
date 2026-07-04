@@ -58,4 +58,38 @@ const compactEdge = {
 const compactResult = validateProposal(normalizeProposal(compactEdge));
 assert.equal(compactResult.valid, true, `compact edge must stay valid, got: ${JSON.stringify(compactResult.errors)}`);
 
+// Same crash class as #82, reached via compact relationship fields instead
+// of an explicit edge: a component/flow/claim missing its own id, or a
+// contains/touches/about/evidenced_by/supersedes target that isn't a
+// string, used to throw inside slug()/edgeId() while deriving edges from
+// those compact fields. These must be reported by validateProposal, not
+// crash normalizeProposal.
+const missingSubjectIdCases = [
+  {
+    name: "component missing id with contains",
+    proposal: { title: "t", creates: { components: [{ contains: ["component.b"] }, { id: "component.b", name: "B" }] } },
+  },
+  {
+    name: "flow missing id with touches",
+    proposal: { title: "t", creates: { flows: [{ touches: ["component.a"] }], components: [{ id: "component.a", name: "A" }] } },
+  },
+  {
+    name: "claim missing id with about",
+    proposal: { title: "t", creates: { claims: [{ about: "component.a" }], components: [{ id: "component.a", name: "A" }] } },
+  },
+  {
+    name: "contains target is not a string",
+    proposal: { title: "t", creates: { components: [{ id: "component.a", name: "A", contains: [123] }] } },
+  },
+];
+
+for (const { name, proposal } of missingSubjectIdCases) {
+  let normalizedCase;
+  assert.doesNotThrow(() => {
+    normalizedCase = normalizeProposal(proposal);
+  }, `normalizeProposal must not throw for: ${name}`);
+  const result = validateProposal(normalizedCase);
+  assert.equal(result.valid, false, `expected invalid for: ${name}, got valid with ${JSON.stringify(normalizedCase)}`);
+}
+
 console.log("check-proposal-validate: ok");
