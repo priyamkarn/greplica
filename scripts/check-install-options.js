@@ -3,9 +3,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const root = new URL("..", import.meta.url);
-const cli = new URL("dist/apps/cli/main.js", root);
+const cliPath = fileURLToPath(new URL("dist/apps/cli/main.js", root));
 const { greplicaHookGuidance } = await import(new URL("dist/libs/hooks/guidance.js", root));
 const { shouldRunAutoMemoryUpdates } = await import(new URL("dist/libs/hooks/worker.js", root));
 
@@ -27,7 +28,7 @@ assert.equal(shouldRunAutoMemoryUpdates(readConfig(guidanceOnly.greplicaHome)), 
 
 const hookOutput = execFileSync(
   process.execPath,
-  [cli.pathname, "hook", "ingest", "--platform", "codex"],
+  [cliPath, "hook", "ingest", "--platform", "codex"],
   {
     cwd: guidanceOnly.repo,
     encoding: "utf8",
@@ -65,7 +66,7 @@ assert.equal(readConfig(copilotHooks.greplicaHome).session.autoMemoryUpdates, tr
 const invalid = spawnSync(
   process.execPath,
   [
-    cli.pathname,
+    cliPath,
     "install",
     "--platform",
     "codex",
@@ -87,7 +88,7 @@ assert.match(invalid.stderr, /--auto-memory enabled requires --hooks enabled/);
 
 const invalidValue = spawnSync(
   process.execPath,
-  [cli.pathname, "install", "--platform", "codex", "--embedding", "local", "--hooks", "sometimes"],
+  [cliPath, "install", "--platform", "codex", "--embedding", "local", "--hooks", "sometimes"],
   {
     cwd: noHooks.repo,
     encoding: "utf8",
@@ -117,14 +118,14 @@ function installInTempRepo(name, flags, platform = "codex") {
   };
   const output = execFileSync(
     process.execPath,
-    [cli.pathname, "install", "--platform", platform, "--embedding", "local", ...flags],
+    [cliPath, "install", "--platform", platform, "--embedding", "local", ...flags],
     {
       cwd: repo,
       encoding: "utf8",
       env,
     },
   );
-  execFileSync(process.execPath, [cli.pathname, "doctor"], {
+  execFileSync(process.execPath, [cliPath, "doctor"], {
     cwd: repo,
     encoding: "utf8",
     env,

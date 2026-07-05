@@ -3,9 +3,10 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 const root = new URL("..", import.meta.url);
-const cli = new URL("dist/apps/cli/main.js", root);
+const cliPath = fileURLToPath(new URL("dist/apps/cli/main.js", root));
 const tmp = mkdtempSync(join(tmpdir(), "greplica-transcript-bundle-test-"));
 
 const codexOne = join(tmp, "codex-one.jsonl");
@@ -128,7 +129,7 @@ writeFileSync(
 const codexOutput = execFileSync(
   process.execPath,
   [
-    cli.pathname,
+    cliPath,
     "transcript",
     "bundle",
     "--platform",
@@ -157,7 +158,7 @@ assert.doesNotMatch(codexBundle, /drop this/);
 const claudeOutput = execFileSync(
   process.execPath,
   [
-    cli.pathname,
+    cliPath,
     "transcript",
     "bundle",
     "--platform",
@@ -177,7 +178,7 @@ assert.match(claudeBundle, /Remember this durable Claude insight/);
 const copilotOutput = execFileSync(
   process.execPath,
   [
-    cli.pathname,
+    cliPath,
     "transcript",
     "bundle",
     "--platform",
@@ -202,7 +203,7 @@ assert.throws(
   () =>
     execFileSync(
       process.execPath,
-      [cli.pathname, "transcript", "bundle", "--platform", "codex", "--file", join(tmp, "missing.jsonl"), "--out", join(tmp, "missing.md")],
+      [cliPath, "transcript", "bundle", "--platform", "codex", "--file", join(tmp, "missing.jsonl"), "--out", join(tmp, "missing.md")],
       { encoding: "utf8", stdio: "pipe" },
     ),
   /Transcript file does not exist/,
@@ -212,7 +213,7 @@ assert.throws(
   () =>
     execFileSync(
       process.execPath,
-      [cli.pathname, "transcript", "bundle", "--platform", "opencode", "--file", codexOne, "--out", opencodeOut],
+      [cliPath, "transcript", "bundle", "--platform", "opencode", "--file", codexOne, "--out", opencodeOut],
       { encoding: "utf8", stdio: "pipe" },
     ),
   /OpenCode transcript projection is not supported yet/,
