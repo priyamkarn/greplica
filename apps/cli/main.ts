@@ -149,7 +149,7 @@ const cliCommands = [
   {
     key: "hookIngest",
     path: ["hook", "ingest"],
-    usage: "hook ingest --platform codex|claude|copilot|opencode|openhands|factory-droid",
+    usage: "hook ingest --platform codex|claude|copilot|opencode|openhands|factory-droid|antigravity",
     handler: runHookIngest,
   },
   {
