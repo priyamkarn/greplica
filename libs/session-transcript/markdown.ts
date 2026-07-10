@@ -1,3 +1,7 @@
+import { redactSecrets, type RedactionMatch } from "./redact.js";
+
+export type { RedactionMatch } from "./redact.js";
+
 export interface SessionTranscriptProjection {
   metadata: Record<string, string>;
   messages: SessionTranscriptMessage[];
@@ -28,11 +32,29 @@ export function renderSessionTranscriptMarkdown(projection: SessionTranscriptPro
   return `${sections.join("\n").trimEnd()}\n`;
 }
 
+export interface SanitizeTranscriptMessageResult {
+  message: string;
+  redactions: RedactionMatch[];
+}
+
+/**
+ * Strips fake instruction tags (prompt-injection defense: historical transcript text
+ * must never be obeyed as live instructions) and then redacts secret-shaped strings
+ * (data-loss-prevention: the sanitized message is what gets written verbatim into a
+ * bundle .md file on disk, so anything secret-shaped must not survive this step).
+ */
 export function sanitizeTranscriptMessage(message: string): string {
-  return message
+  return sanitizeTranscriptMessageWithReport(message).message;
+}
+
+export function sanitizeTranscriptMessageWithReport(message: string): SanitizeTranscriptMessageResult {
+  const withoutInjectedInstructions = message
     .replace(/<system_instruction>[\s\S]*?<\/system_instruction>\s*/g, "")
     .replace(/<developer_instruction>[\s\S]*?<\/developer_instruction>\s*/g, "")
     .trim();
+
+  const { text, matches } = redactSecrets(withoutInjectedInstructions);
+  return { message: text, redactions: matches };
 }
 
 export function copyStringField(

@@ -468,6 +468,16 @@ function runTranscriptBundle(args: string[]): void {
   for (const entry of result.entries) {
     console.log(`- ${entry.sessionRef ?? "unknown"} (${entry.file})`);
   }
+  if (result.redactions.length > 0) {
+    const totalCount = result.redactions.reduce((sum, redaction) => sum + redaction.count, 0);
+    console.log(`Warning: redacted ${totalCount} likely secret(s) before writing the bundle:`);
+    for (const redaction of result.redactions) {
+      console.log(`- ${redaction.type}: ${redaction.count}`);
+    }
+    console.log(
+      "Redaction is best-effort pattern matching, not a guarantee. Review the bundle before sharing or committing it.",
+    );
+  }
 }
 
 function markProposalApplyMemoryUpdated(repoId: string, proposal: unknown): void {

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { InstallPlatform } from "../install/paths.js";
 import { platformInstaller } from "../install/platforms/index.js";
+import type { RedactionMatch } from "./redact.js";
 
 export interface TranscriptBundleInput {
   platform: InstallPlatform;
@@ -18,6 +19,31 @@ export interface TranscriptBundleEntry {
 export interface TranscriptBundleResult {
   markdown: string;
   entries: TranscriptBundleEntry[];
+  /**
+   * Secret-shaped strings redacted while building this bundle, aggregated by type.
+   * Every platform adapter's transcriptToMarkdown routes messages through
+   * sanitizeTranscriptMessage before this function ever sees them, so the actual
+   * redaction already happened; this just tallies the "[REDACTED:type]" markers
+   * that step left behind, to drive the CLI warning.
+   */
+  redactions: RedactionMatch[];
+}
+
+const REDACTION_MARKER_PATTERN = /\[REDACTED:([a-z0-9-]+)\]/gi;
+
+function countRedactionMarkers(markdown: string): RedactionMatch[] {
+  const totals = new Map<string, number>();
+  for (const match of markdown.matchAll(REDACTION_MARKER_PATTERN)) {
+    const type = match[1];
+    totals.set(type, (totals.get(type) ?? 0) + 1);
+  }
+  return [...totals.entries()].map(([type, count]) => ({ type, count }));
+}
+
+function mergeRedactionMatches(totals: Map<string, number>, matches: RedactionMatch[]): void {
+  for (const match of matches) {
+    totals.set(match.type, (totals.get(match.type) ?? 0) + match.count);
+  }
 }
 
 export function buildTranscriptBundle(input: TranscriptBundleInput): TranscriptBundleResult {
@@ -45,10 +71,13 @@ export function buildTranscriptBundle(input: TranscriptBundleInput): TranscriptB
     "## Transcripts",
   ];
 
+  const redactionTotals = new Map<string, number>();
+
   input.files.forEach((file, index) => {
     if (!existsSync(file)) throw new Error(`Transcript file does not exist: ${file}`);
     const rawTranscript = installer.loadTranscript ? installer.loadTranscript(file) : readFileSync(file, "utf8");
     const filteredMarkdown = installer.transcriptToMarkdown(rawTranscript);
+    mergeRedactionMatches(redactionTotals, countRedactionMarkers(filteredMarkdown));
     const metadata = parseFilteredTranscriptMetadata(filteredMarkdown);
     const sessionId = metadata.session_id;
     const sessionRef = sessionId === undefined ? undefined : installer.sessionSourceRef(sessionId);
@@ -80,6 +109,7 @@ export function buildTranscriptBundle(input: TranscriptBundleInput): TranscriptB
   return {
     markdown: `${sections.join("\n").trimEnd()}\n`,
     entries,
+    redactions: [...redactionTotals.entries()].map(([type, count]) => ({ type, count })),
   };
 }
 
