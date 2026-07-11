@@ -2,11 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import type { InstallPlatform } from "../install/paths.js";
 import { platformInstaller } from "../install/platforms/index.js";
 
-interface RedactionMatch {
-  type: string;
-  count: number;
-}
-
 export interface TranscriptBundleInput {
   platform: InstallPlatform;
   files: string[];
@@ -23,17 +18,6 @@ export interface TranscriptBundleEntry {
 export interface TranscriptBundleResult {
   markdown: string;
   entries: TranscriptBundleEntry[];
-  /** Secret-shaped strings redacted while building this bundle, aggregated by type. */
-  redactions: RedactionMatch[];
-}
-
-const REDACTION_MARKER_PATTERN = /\[REDACTED:([a-z0-9-]+)\]/gi;
-
-function countRedactionMarkers(markdown: string, totals: Map<string, number>): void {
-  for (const match of markdown.matchAll(REDACTION_MARKER_PATTERN)) {
-    const type = match[1];
-    totals.set(type, (totals.get(type) ?? 0) + 1);
-  }
 }
 
 export function buildTranscriptBundle(input: TranscriptBundleInput): TranscriptBundleResult {
@@ -61,13 +45,10 @@ export function buildTranscriptBundle(input: TranscriptBundleInput): TranscriptB
     "## Transcripts",
   ];
 
-  const redactionTotals = new Map<string, number>();
-
   input.files.forEach((file, index) => {
     if (!existsSync(file)) throw new Error(`Transcript file does not exist: ${file}`);
     const rawTranscript = installer.loadTranscript ? installer.loadTranscript(file) : readFileSync(file, "utf8");
     const filteredMarkdown = installer.transcriptToMarkdown(rawTranscript);
-    countRedactionMarkers(filteredMarkdown, redactionTotals);
     const metadata = parseFilteredTranscriptMetadata(filteredMarkdown);
     const sessionId = metadata.session_id;
     const sessionRef = sessionId === undefined ? undefined : installer.sessionSourceRef(sessionId);
@@ -99,7 +80,6 @@ export function buildTranscriptBundle(input: TranscriptBundleInput): TranscriptB
   return {
     markdown: `${sections.join("\n").trimEnd()}\n`,
     entries,
-    redactions: [...redactionTotals.entries()].map(([type, count]) => ({ type, count })),
   };
 }
 
