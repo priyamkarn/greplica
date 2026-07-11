@@ -7,17 +7,6 @@
  * on disk.
  */
 
-export interface RedactionMatch {
-  /** Human-readable label for the kind of secret detected, used in the placeholder and summary. */
-  type: string;
-  count: number;
-}
-
-export interface RedactSecretsResult {
-  text: string;
-  matches: RedactionMatch[];
-}
-
 interface RedactionRule {
   type: string;
   pattern: RegExp;
@@ -31,6 +20,11 @@ interface RedactionRule {
 
 function placeholder(type: string): string {
   return `[REDACTED:${type}]`;
+}
+
+function replaceAssignment(match: RegExpMatchArray, type: string): string {
+  const quote = match[2] ?? "";
+  return `${match[1]}${quote}${placeholder(type)}${quote}`;
 }
 
 const RULES: RedactionRule[] = [
@@ -94,32 +88,28 @@ const RULES: RedactionRule[] = [
     // The negative lookahead skips values an earlier, more specific rule already redacted.
     type: "env-assignment",
     pattern:
-      /^([ \t]*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|PWD|API_KEY|APIKEY|ACCESS_KEY|PRIVATE_KEY|CREDENTIAL)[A-Za-z0-9_]*\s*[:=]\s*)(['"]?)(?!\[REDACTED:)(\S+)\2/gim,
-    replace: (match) => `${match[1]}${match[2]}${placeholder("env-assignment")}${match[2]}`,
+      /^([ \t]*(?:export\s+)?(?=[A-Za-z_])(?=[A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|PWD|API_KEY|APIKEY|ACCESS_KEY|PRIVATE_KEY|CREDENTIAL))[A-Za-z0-9_]+\s*[:=]\s*)(?!['"]?\[REDACTED:)(?:(['"])([^\r\n]*?)\2|(\S+))/gim,
+    replace: (match) => replaceAssignment(match, "env-assignment"),
   },
   {
     // Generic inline "key: value" / "key = value" secret assignments outside of .env files
     // (e.g. spoken in prose or JSON-ish debug output). Same guard against double-redaction.
     type: "inline-secret-assignment",
     pattern:
-      /\b((?:api[_-]?key|secret|token|password|passwd|access[_-]?key|private[_-]?key)\s*[:=]\s*)(['"]?)(?!\[REDACTED:)([^\s'",}]{6,})\2/gi,
-    replace: (match) => `${match[1]}${match[2]}${placeholder("inline-secret-assignment")}${match[2]}`,
+      /\b((?:api[_-]?key|secret|token|password|passwd|access[_-]?key|private[_-]?key)\s*[:=]\s*)(?!['"]?\[REDACTED:)(?:(['"])([^\r\n]*?)\2|([^\s'",}]{6,}))/gi,
+    replace: (match) => replaceAssignment(match, "inline-secret-assignment"),
   },
 ];
 
-export function redactSecrets(text: string): RedactSecretsResult {
+export function redactSecrets(text: string): string {
   let result = text;
-  const matches: RedactionMatch[] = [];
 
   for (const rule of RULES) {
-    let count = 0;
     result = result.replace(rule.pattern, (...args) => {
-      count += 1;
       const match = args.slice(0, -2) as unknown as RegExpMatchArray;
       return rule.replace ? rule.replace(match) : placeholder(rule.type);
     });
-    if (count > 0) matches.push({ type: rule.type, count });
   }
 
-  return { text: result, matches };
+  return result;
 }

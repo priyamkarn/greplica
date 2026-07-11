@@ -10,23 +10,18 @@ import { sanitizeTranscriptMessage } from "../dist/libs/session-transcript/markd
 // test fixture, fake or not).
 const join = (...parts) => parts.join("");
 
-function typesOf(matches) {
-  return matches.map((match) => match.type).sort();
-}
-
 // AWS access key id
 {
   const fakeKey = join("AKIA", "ABCDEFGHIJKLMNOP");
-  const { text, matches } = redactSecrets(`aws key is ${fakeKey} please rotate it`);
+  const text = redactSecrets(`aws key is ${fakeKey} please rotate it`);
   assert.ok(!text.includes(fakeKey));
   assert.match(text, /\[REDACTED:aws-access-key-id\]/);
-  assert.deepEqual(typesOf(matches), ["aws-access-key-id"]);
 }
 
 // AWS secret access key (requires the labeled key= form to avoid false positives)
 {
   const fakeSecret = join("wJalrXUtnFEMI/K7MDENG/bPxRfiCY", "EXAMPLEKEY");
-  const { text } = redactSecrets(`aws_secret_access_key=${fakeSecret}`);
+  const text = redactSecrets(`aws_secret_access_key=${fakeSecret}`);
   assert.ok(!text.includes(fakeSecret));
   assert.match(text, /aws_secret_access_key=\[REDACTED:aws-secret-access-key\]/);
 }
@@ -34,16 +29,15 @@ function typesOf(matches) {
 // GitHub personal access token
 {
   const fakeToken = join("ghp_", "1234567890abcdef1234567890abcdef1234");
-  const { text, matches } = redactSecrets(`use ${fakeToken} to clone`);
+  const text = redactSecrets(`use ${fakeToken} to clone`);
   assert.ok(!text.includes(fakeToken));
   assert.match(text, /\[REDACTED:github-token\]/);
-  assert.deepEqual(typesOf(matches), ["github-token"]);
 }
 
 // Fine-grained GitHub PAT
 {
   const fakeToken = join("github_pat_11ABCDEFG0", "123456789abcdefghijklmnopqrstuvwxyz012345");
-  const { text } = redactSecrets(fakeToken);
+  const text = redactSecrets(fakeToken);
   assert.ok(!text.includes(fakeToken));
   assert.match(text, /\[REDACTED:github-token\]/);
 }
@@ -51,7 +45,7 @@ function typesOf(matches) {
 // Slack token
 {
   const fakeToken = join("xoxb-123456789012-", "123456789012-abcdefghijklmnopqrstuvwx");
-  const { text } = redactSecrets(`token: ${fakeToken}`);
+  const text = redactSecrets(`token: ${fakeToken}`);
   assert.ok(!text.includes(fakeToken));
   assert.match(text, /\[REDACTED:slack-token\]/);
 }
@@ -59,7 +53,7 @@ function typesOf(matches) {
 // Stripe secret key
 {
   const fakeKey = join("sk_live_", "abcdefghijklmnopqrstuvwx");
-  const { text } = redactSecrets(`STRIPE_KEY=${fakeKey}`);
+  const text = redactSecrets(`STRIPE_KEY=${fakeKey}`);
   assert.ok(!text.includes(fakeKey));
   assert.match(text, /\[REDACTED:stripe-key\]/);
 }
@@ -67,7 +61,7 @@ function typesOf(matches) {
 // Anthropic API key
 {
   const fakeKey = join("sk-ant-api03-", "abcdefghijklmnopqrstuvwxyz0123456789");
-  const { text } = redactSecrets(`ANTHROPIC_API_KEY=${fakeKey}`);
+  const text = redactSecrets(`ANTHROPIC_API_KEY=${fakeKey}`);
   assert.ok(!text.includes(fakeKey));
   assert.match(text, /\[REDACTED:anthropic-api-key\]/);
 }
@@ -75,7 +69,7 @@ function typesOf(matches) {
 // OpenAI API key
 {
   const fakeKey = join("sk-", "abcdefghijklmnopqrstuvwxyz0123456789ABCD");
-  const { text } = redactSecrets(`export OPENAI_API_KEY=${fakeKey}`);
+  const text = redactSecrets(`export OPENAI_API_KEY=${fakeKey}`);
   assert.ok(!text.includes(fakeKey));
   assert.match(text, /\[REDACTED:(openai-api-key|env-assignment)\]/);
 }
@@ -83,7 +77,7 @@ function typesOf(matches) {
 // Google API key
 {
   const fakeKey = join("AIzaSyD-9tSrke72PouQMnMX-", "a7eZSW0jkFMBWY");
-  const { text } = redactSecrets(`${fakeKey} is the maps key`);
+  const text = redactSecrets(`${fakeKey} is the maps key`);
   assert.ok(!text.includes(fakeKey));
   assert.match(text, /\[REDACTED:google-api-key\]/);
 }
@@ -94,7 +88,7 @@ function typesOf(matches) {
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.",
     "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
   );
-  const { text } = redactSecrets(`auth header carried ${fakeJwt}`);
+  const text = redactSecrets(`auth header carried ${fakeJwt}`);
   assert.ok(!text.includes(fakeJwt));
   assert.match(text, /\[REDACTED:jwt\]/);
 }
@@ -102,7 +96,7 @@ function typesOf(matches) {
 // Bearer token in a curl command
 {
   const fakeToken = join("abc123DEF456ghi789", "JKL012mno");
-  const { text } = redactSecrets(
+  const text = redactSecrets(
     `curl -H 'Authorization: Bearer ${fakeToken}' https://api.example.com`,
   );
   assert.ok(!text.includes(fakeToken));
@@ -112,7 +106,7 @@ function typesOf(matches) {
 // Password in a connection string / URL
 {
   const fakePassword = join("sup3rSecret", "Pass");
-  const { text } = redactSecrets(`postgres://dbuser:${fakePassword}@db.example.com:5432/app`);
+  const text = redactSecrets(`postgres://dbuser:${fakePassword}@db.example.com:5432/app`);
   assert.ok(!text.includes(fakePassword));
   assert.match(text, /dbuser:\[REDACTED:password\]@/);
 }
@@ -124,7 +118,7 @@ function typesOf(matches) {
     "sQ0bu3aumnAgggeEot+3ww==",
   );
   const key = ["-----BEGIN RSA PRIVATE KEY-----", fakeKeyBody, "-----END RSA PRIVATE KEY-----"].join("\n");
-  const { text } = redactSecrets(`here is the key:\n${key}\nthanks`);
+  const text = redactSecrets(`here is the key:\n${key}\nthanks`);
   assert.ok(!text.includes(fakeKeyBody));
   assert.match(text, /\[REDACTED:private-key-block\]/);
 }
@@ -138,7 +132,7 @@ function typesOf(matches) {
     `STRIPE_SECRET_KEY=${fakeStripeKey}`,
     "NODE_ENV=production",
   ].join("\n");
-  const { text } = redactSecrets(pasted);
+  const text = redactSecrets(pasted);
   assert.ok(!text.includes(fakeStripeKey));
   assert.match(text, /STRIPE_SECRET_KEY=\[REDACTED:env-assignment\]/);
   // Unrelated, non-secret-shaped keys must survive untouched.
@@ -148,17 +142,31 @@ function typesOf(matches) {
 // Generic inline "password: ..." spoken in prose, not just .env format
 {
   const fakePassword = join("hunter2", "ButLonger");
-  const { text } = redactSecrets(`the db password: ${fakePassword} should be rotated`);
+  const text = redactSecrets(`the db password: ${fakePassword} should be rotated`);
   assert.ok(!text.includes(fakePassword));
   assert.match(text, /\[REDACTED:inline-secret-assignment\]/);
+}
+
+// Quoted assignments may contain spaces and must be redacted as one value.
+{
+  const fakePassword = "correct horse battery staple";
+  const text = redactSecrets(`DATABASE_PASSWORD="${fakePassword}"`);
+  assert.ok(!text.includes(fakePassword));
+  assert.equal(text, 'DATABASE_PASSWORD="[REDACTED:env-assignment]"');
+}
+
+{
+  const fakePassword = "another multi word password";
+  const text = redactSecrets(`the password: '${fakePassword}' should be rotated`);
+  assert.ok(!text.includes(fakePassword));
+  assert.equal(text, "the password: '[REDACTED:inline-secret-assignment]' should be rotated");
 }
 
 // Ordinary conversational text must survive completely unchanged.
 {
   const message = "Refactored the auth module to use dependency injection and added tests.";
-  const { text, matches } = redactSecrets(message);
+  const text = redactSecrets(message);
   assert.equal(text, message);
-  assert.deepEqual(matches, []);
 }
 
 // End-to-end through sanitizeTranscriptMessage: fake instruction tags AND secrets

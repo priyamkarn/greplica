@@ -11,6 +11,8 @@ const tmp = mkdtempSync(join(tmpdir(), "greplica-transcript-bundle-redaction-tes
 
 const codexFile = join(tmp, "codex-secrets.jsonl");
 const out = join(tmp, "codex-secrets-bundle.md");
+const metadataToken = ["ghp_", "1234567890abcdef1234567890abcdef1234"].join("");
+const quotedPassword = "correct horse battery staple";
 
 writeFileSync(
   codexFile,
@@ -20,7 +22,7 @@ writeFileSync(
       payload: {
         id: "codex-secrets-session",
         timestamp: "2026-07-01T00:00:00.000Z",
-        cwd: "/repo/example",
+        cwd: `https://user:${metadataToken}@github.com/example/repo`,
       },
     }),
     JSON.stringify({
@@ -29,7 +31,7 @@ writeFileSync(
       payload: {
         type: "user_message",
         message:
-          "Here is my .env for reference:\nAWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP\nSTRIPE_SECRET_KEY=abcdefghijklmnopqrstuvwx\nNODE_ENV=production",
+          `Here is my .env for reference:\nAWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP\nSTRIPE_SECRET_KEY=abcdefghijklmnopqrstuvwx\nDATABASE_PASSWORD="${quotedPassword}"\nNODE_ENV=production`,
       },
     }),
     JSON.stringify({
@@ -55,6 +57,8 @@ const bundle = readFileSync(out, "utf8");
 assert.doesNotMatch(bundle, /AKIAABCDEFGHIJKLMNOP/);
 assert.doesNotMatch(bundle, /abcdefghijklmnopqrstuvwx/);
 assert.doesNotMatch(bundle, /abc123DEF456ghi789JKL012mno/);
+assert.ok(!bundle.includes(metadataToken));
+assert.ok(!bundle.includes(quotedPassword));
 
 // Non-secret content and structure must be preserved.
 assert.match(bundle, /NODE_ENV=production/);
@@ -62,6 +66,8 @@ assert.match(bundle, /Debugged the request with curl/);
 assert.match(bundle, /\[REDACTED:aws-access-key-id\]/);
 assert.match(bundle, /\[REDACTED:(env-assignment|stripe-key)\]/);
 assert.match(bundle, /Bearer \[REDACTED:bearer-token\]/);
+assert.match(bundle, /cwd: https:\/\/user:\[REDACTED:github-token\]@github\.com\/example\/repo/);
+assert.match(bundle, /DATABASE_PASSWORD="\[REDACTED:env-assignment\]"/);
 
 // The CLI must warn that it redacted something, so the user knows to still review the file.
 assert.match(output, /Warning: redacted \d+ likely secret\(s\)/);
