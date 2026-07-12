@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ClaimedMemoryUpdateAttempt } from "./types.js";
@@ -64,11 +64,17 @@ export async function runHookWorker(): Promise<void> {
 async function maybeUpdateWorkingMemory(attempt: ClaimedMemoryUpdateAttempt): Promise<void> {
   const cwd = attempt.session.cwd;
   const transcriptPath = attempt.session.transcript_path;
-  if (cwd === null || transcriptPath === null || !existsSync(transcriptPath)) return;
+  if (cwd === null || transcriptPath === null) return;
 
   const runner = platformInstaller(attempt.session.platform);
   const sessionRef = runner.sessionSourceRef(attempt.session.session_id);
-  const transcript = runner.loadTranscript ? runner.loadTranscript(transcriptPath) : readFileSync(transcriptPath, "utf8");
+  let transcript: string;
+  try {
+    transcript = runner.loadTranscript ? runner.loadTranscript(transcriptPath) : readFileSync(transcriptPath, "utf8");
+  } catch {
+    return;
+  }
+  if (transcript.trim().length === 0) return;
   const transcriptMarkdown = runner.transcriptToMarkdown(transcript);
   if (transcriptMarkdown.trim().length === 0) return;
 

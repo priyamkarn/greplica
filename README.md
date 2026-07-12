@@ -118,27 +118,33 @@ Current showcase rows:
 ## Commands
 
 ```bash
-greplica install --platform codex|claude|copilot|opencode|openhands|factory-droid|antigravity --embedding local|openai [--hooks enabled|disabled] [--auto-memory enabled|disabled]
+greplica install --platform codex|claude|copilot|cursor|opencode|openhands|factory-droid|antigravity --embedding local|openai [--hooks enabled|disabled] [--auto-memory enabled|disabled]
 greplica config
 greplica doctor [--check-embeddings]
+greplica embeddings prewarm
 greplica graph read
 greplica graph context "<query>" [--debug]
 greplica graph audit anchors
 greplica graph view [--out <file>] [--no-open]
 greplica graph export <dir>
-greplica transcript bundle --platform codex|claude|copilot --file <path> [--file <path>...] --out <bundle.md>
 greplica proposal validate <proposal.json>
 greplica proposal apply <proposal.json>
+greplica session mark-memory-current --session-ref <ref>
+greplica transcript bundle --platform codex|claude|copilot|opencode --file <path> [--file <path>...] --out <bundle.md>
 ```
 
 - `greplica graph context "<query>"` - returns Markdown for agent use. Add `--debug` for the full retrieval payload with ranking signals.
 - `greplica graph read` - prints the current graph view: all components, flows, claims, sources, and edges in scope.
 - `greplica graph view` to visualise the current memory in a local HTML, opens in your default browser. Use `--out` to choose where the file is written; by default it goes to a temp path.
-- `greplica transcript bundle` - converts one or more Codex, Claude Code, or GitHub Copilot CLI JSONL transcripts into a sanitized Markdown bundle for `greplica-fast-session-bootstrap`.
+- `greplica transcript bundle` - converts one or more Codex, Claude Code, GitHub Copilot CLI, or OpenCode transcripts into a sanitized Markdown bundle for `greplica-fast-session-bootstrap`.
+- `greplica embeddings prewarm` - downloads and initializes the local embedding model ahead of the first query when local embeddings are configured.
+- `greplica session mark-memory-current` - marks a tracked agent session as already reflected in working memory.
 - `greplica doctor` - verifies installation and diagnoses configuration failures. Not a required preflight before every command.
 - `greplica install` prepares repo state, local storage, and agent integration; normal repo commands require install first.
 
 For **OpenHands**, install is repo-local: skills are written to `.agents/skills/` and the `UserPromptSubmit`/`Stop` hooks to `.openhands/hooks.json` (Claude/Codex/Copilot install to the agent's home config instead). GitHub Copilot CLI installs personal skills under `~/.copilot/skills` (or `$COPILOT_HOME/skills`) and user hooks under `~/.copilot/hooks/greplica.json`. The hooks inject `graph context` guidance and trigger background working-memory updates; OpenHands must trust the repo hooks for the background save to run.
+
+For **Cursor**, skills are written to `~/.cursor/skills` and the `beforeSubmitPrompt`/`stop` hooks to `~/.cursor/hooks.json` (both overridable via `$CURSOR_HOME`). `greplica-bootstrap` and `greplica graph context` guidance is delivered through an always-applied project rule at `.cursor/rules/greplica.mdc` rather than the hook, because Cursor's `beforeSubmitPrompt` hook cannot inject prompt context; the hooks track sessions and trigger `greplica-update-working-memory`. A user-authored `greplica.mdc` is never overwritten (install falls back to `greplica-N.mdc`). Reload Cursor if the new rule does not appear immediately. Background working-memory updates run the Cursor CLI (`cursor-agent`), so that must be installed and authenticated for automatic saves; session tracking and guidance work without it.
 
 ## License
 

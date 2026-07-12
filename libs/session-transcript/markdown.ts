@@ -30,12 +30,7 @@ export function renderSessionTranscriptMarkdown(projection: SessionTranscriptPro
   return `${sections.join("\n").trimEnd()}\n`;
 }
 
-/**
- * Strips fake instruction tags (prompt-injection defense: historical transcript text
- * must never be obeyed as live instructions) and then redacts secret-shaped strings
- * (data-loss-prevention: the sanitized message is what gets written verbatim into a
- * bundle .md file on disk, so anything secret-shaped must not survive this step).
- */
+/** Strips injected instruction tags and best-effort redacts secret-shaped strings. */
 export function sanitizeTranscriptMessage(message: string): string {
   const withoutInjectedInstructions = message
     .replace(/<system_instruction>[\s\S]*?<\/system_instruction>\s*/g, "")
