@@ -69,6 +69,10 @@ export class KnowledgeGraphService {
     private readonly contextBuilder = new GraphContextBuilder(repository),
   ) {}
 
+  close(): void {
+    this.repository.close();
+  }
+
   initRepo(input: RepoRef): InitRepoResult {
     const { repo, created } = this.repository.upsertRepo(input);
     const main = this.repository.ensureScope({
