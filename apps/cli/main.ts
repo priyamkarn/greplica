@@ -38,6 +38,9 @@ interface CommandContext {
   service: KnowledgeGraphService;
 }
 
+type CommandContextProvider = () => CommandContext;
+type CommandContextHandler = (args: string[], getContext: CommandContextProvider) => void | Promise<void>;
+
 type HelpMode = "query-aware";
 
 interface CliCommand {
@@ -73,7 +76,7 @@ const cliCommands = [
     key: "doctor",
     path: ["doctor"],
     usage: "doctor [--check-embeddings]",
-    handler: runDoctor,
+    handler: withCommandContext(runDoctor),
     showInTopLevelHelp: true,
   },
   {
@@ -87,14 +90,14 @@ const cliCommands = [
     key: "graphRead",
     path: ["graph", "read"],
     usage: "graph read",
-    handler: runGraphReadCommand,
+    handler: withCommandContext(runGraphReadCommand),
     showInTopLevelHelp: true,
   },
   {
     key: "graphContext",
     path: ["graph", "context"],
     usage: "graph context <query> [--debug]",
-    handler: runGraphContextCommand,
+    handler: withCommandContext(runGraphContextCommand),
     showInTopLevelHelp: true,
     helpMode: "query-aware",
   },
@@ -102,42 +105,42 @@ const cliCommands = [
     key: "graphAuditAnchors",
     path: ["graph", "audit", "anchors"],
     usage: "graph audit anchors",
-    handler: runGraphAuditAnchorsCommand,
+    handler: withCommandContext(runGraphAuditAnchorsCommand),
     showInTopLevelHelp: true,
   },
   {
     key: "graphExport",
     path: ["graph", "export"],
     usage: "graph export <dir>",
-    handler: runGraphExportCommand,
+    handler: withCommandContext(runGraphExportCommand),
     showInTopLevelHelp: true,
   },
   {
     key: "graphView",
     path: ["graph", "view"],
     usage: "graph view [--out <file>] [--no-open]",
-    handler: runGraphViewCommand,
+    handler: withCommandContext(runGraphViewCommand),
     showInTopLevelHelp: true,
   },
   {
     key: "proposalValidate",
     path: ["proposal", "validate"],
     usage: "proposal validate <file>",
-    handler: runProposalValidateCommand,
+    handler: withCommandContext(runProposalValidateCommand),
     showInTopLevelHelp: true,
   },
   {
     key: "proposalApply",
     path: ["proposal", "apply"],
     usage: "proposal apply <file>",
-    handler: runProposalApplyCommand,
+    handler: withCommandContext(runProposalApplyCommand),
     showInTopLevelHelp: true,
   },
   {
     key: "sessionMarkMemoryCurrent",
     path: ["session", "mark-memory-current"],
     usage: "session mark-memory-current --session-ref <ref>",
-    handler: runSessionMarkMemoryCurrent,
+    handler: withCommandContext(runSessionMarkMemoryCurrent),
     showInTopLevelHelp: true,
   },
   {
@@ -248,8 +251,8 @@ async function runInstallCommand(args: string[]): Promise<void> {
   printInstallResult(result);
 }
 
-function runGraphReadCommand(_args: string[]): void {
-  const { repo, service } = createCommandContext();
+function runGraphReadCommand(_args: string[], getContext: CommandContextProvider): void {
+  const { repo, service } = getContext();
   const graph = service.readGraph(repo);
   console.log("Current graph view: main + working");
   printSection("Components", graph.components, (item) => `${named(item)} ${anchor(item)}`.trim());
@@ -259,11 +262,11 @@ function runGraphReadCommand(_args: string[]): void {
   printSection("Edges", graph.edges, (item) => `${field(item, "from_type")}:${field(item, "from_id")} -[${field(item, "kind")}]-> ${field(item, "to_type")}:${field(item, "to_id")}`);
 }
 
-async function runGraphContextCommand(args: string[]): Promise<void> {
+async function runGraphContextCommand(args: string[], getContext: CommandContextProvider): Promise<void> {
   const output = parseGraphContextOutput(args);
   const query = args.filter((arg) => arg !== "--debug").join(" ").trim();
   if (query.length === 0) throw new Error(usage("graphContext"));
-  const { repo, service } = createCommandContext();
+  const { repo, service } = getContext();
   const result = await service.contextGraph(repo, query);
   if (output === "debug") {
     console.log(JSON.stringify(result, null, 2));
@@ -272,25 +275,25 @@ async function runGraphContextCommand(args: string[]): Promise<void> {
   }
 }
 
-async function runGraphAuditAnchorsCommand(_args: string[]): Promise<void> {
-  const { repo, service } = createCommandContext();
+async function runGraphAuditAnchorsCommand(_args: string[], getContext: CommandContextProvider): Promise<void> {
+  const { repo, service } = getContext();
   const result = await service.auditCodeAnchors(repo);
   printAnchorAudit(result);
   if (anchorAuditIssueCount(result) > 0) process.exitCode = 1;
 }
 
-function runGraphExportCommand(args: string[]): void {
+function runGraphExportCommand(args: string[], getContext: CommandContextProvider): void {
   const outputDir = requireFile(args[0], usage("graphExport"));
-  const { repo, service } = createCommandContext();
+  const { repo, service } = getContext();
   const files = buildGraphFolderExport(service.readGraph(repo));
   writeGraphFolderExport(outputDir, files);
   console.log(`Exported current graph view to ${outputDir}`);
   console.log(`Files: ${files.length}`);
 }
 
-function runGraphViewCommand(args: string[]): void {
+function runGraphViewCommand(args: string[], getContext: CommandContextProvider): void {
   const options = parseGraphViewArgs(args);
-  const { repo, service } = createCommandContext();
+  const { repo, service } = getContext();
   const graph = service.readGraph(repo);
   if (graph.components.length === 0) {
     console.log("No components to visualise. Bootstrap memory first.");
@@ -309,9 +312,9 @@ function runGraphViewCommand(args: string[]): void {
   }
 }
 
-async function runProposalValidateCommand(args: string[]): Promise<void> {
+async function runProposalValidateCommand(args: string[], getContext: CommandContextProvider): Promise<void> {
   const file = requireFile(args[0], usage("proposalValidate"));
-  const { repo, service } = createCommandContext();
+  const { repo, service } = getContext();
   const proposal = readProposal(file);
   const result = await service.validateProposal(repo, proposal);
   if (result.valid) {
@@ -330,9 +333,9 @@ async function runProposalValidateCommand(args: string[]): Promise<void> {
   process.exitCode = 1;
 }
 
-async function runProposalApplyCommand(args: string[]): Promise<void> {
+async function runProposalApplyCommand(args: string[], getContext: CommandContextProvider): Promise<void> {
   const file = requireFile(args[0], usage("proposalApply"));
-  const { repo, service } = createCommandContext();
+  const { repo, service } = getContext();
   const installed = service.requireRepo(repo);
   const proposal = readProposal(file);
   const result = await service.applyProposal(repo, proposal);
@@ -391,6 +394,22 @@ function createCommandContext(): CommandContext {
   return { repo, env, config, service };
 }
 
+function withCommandContext(handler: CommandContextHandler): CliCommand["handler"] {
+  return async (args: string[]): Promise<void> => {
+    let context: CommandContext | undefined;
+    const getContext = (): CommandContext => {
+      context ??= createCommandContext();
+      return context;
+    };
+
+    try {
+      await handler(args, getContext);
+    } finally {
+      context?.service.close();
+    }
+  };
+}
+
 function runHookIngest(args: string[]): void {
   if (process.env.GREPLICA_HOOK_DISABLE === "1") return;
 
@@ -441,9 +460,9 @@ function hookGuidanceOutput(platform: InstallPlatform, additionalContext: string
   };
 }
 
-function runSessionMarkMemoryCurrent(args: string[]): void {
+function runSessionMarkMemoryCurrent(args: string[], getContext: CommandContextProvider): void {
   const sessionRef = parseRequiredOption(args, "--session-ref", usage("sessionMarkMemoryCurrent"));
-  const { repo, service } = createCommandContext();
+  const { repo, service } = getContext();
   const installed = service.requireRepo(repo);
   const db = openDatabase();
   try {
@@ -531,10 +550,10 @@ function parseHookPlatform(value: string | undefined): InstallPlatform {
   throw new Error(usage("hookIngest"));
 }
 
-async function runDoctor(args: string[]): Promise<void> {
+async function runDoctor(args: string[], getContext: CommandContextProvider): Promise<void> {
   let context: CommandContext;
   try {
-    context = createCommandContext();
+    context = getContext();
   } catch (error: unknown) {
     console.log("Repo: not detected");
     console.log(error instanceof Error ? error.message : String(error));

@@ -37,41 +37,45 @@ export async function installGreplica(options: InstallOptions): Promise<InstallR
   embedding.config.session.autoMemoryUpdates = options.autoMemoryUpdates;
   writeGreplicaConfig(embedding.config);
   const service = createLocalKnowledgeGraphService(graphContextConfigFromGreplicaConfig(embedding.config));
-  const init = service.initRepo(options.repo);
-  const platformInstall = installPlatform(options.platform, {
-    repoRoot: options.repo.repo_root ?? process.cwd(),
-    hooks: options.hooks,
-  });
-  const supportsAutoMemoryUpdates = platformInstall.hooks !== undefined && platformInstall.supportsAutoMemoryUpdates !== false;
-  if (!supportsAutoMemoryUpdates && embedding.config.session.autoMemoryUpdates) {
-    embedding.config.session.autoMemoryUpdates = false;
-    writeGreplicaConfig(embedding.config);
-  }
-
-  const notes: string[] = [];
-  if (options.autoMemoryUpdates && !supportsAutoMemoryUpdates && platformInstall.hooks !== undefined) {
-    notes.push(`${platformDisplayName(options.platform)} automatic memory updates are not supported yet; installed hooks still record session activity.`);
-  }
-  if (options.embedding === "local") {
-    if (startLocalEmbeddingPrewarm()) {
-      notes.push("Local embedding model prewarm was queued in the background; if another prewarm is already running, this one will skip. The first query may still download the model if prewarm has not finished.");
-    } else {
-      notes.push("Local embeddings were configured, but background prewarm could not be started; the first query may download the local model.");
+  try {
+    const init = service.initRepo(options.repo);
+    const platformInstall = installPlatform(options.platform, {
+      repoRoot: options.repo.repo_root ?? process.cwd(),
+      hooks: options.hooks,
+    });
+    const supportsAutoMemoryUpdates = platformInstall.hooks !== undefined && platformInstall.supportsAutoMemoryUpdates !== false;
+    if (!supportsAutoMemoryUpdates && embedding.config.session.autoMemoryUpdates) {
+      embedding.config.session.autoMemoryUpdates = false;
+      writeGreplicaConfig(embedding.config);
     }
-  }
 
-  return {
-    platform: options.platform,
-    skills: platformInstall.skills,
-    hooks: platformInstall.hooks,
-    rules: platformInstall.rules,
-    hooksRequested: options.hooks,
-    embedding: options.embedding,
-    session: embedding.config.session,
-    configFile: embedding.configPath,
-    databasePath: init.database_path,
-    notes,
-  };
+    const notes: string[] = [];
+    if (options.autoMemoryUpdates && !supportsAutoMemoryUpdates && platformInstall.hooks !== undefined) {
+      notes.push(`${platformDisplayName(options.platform)} automatic memory updates are not supported yet; installed hooks still record session activity.`);
+    }
+    if (options.embedding === "local") {
+      if (startLocalEmbeddingPrewarm()) {
+        notes.push("Local embedding model prewarm was queued in the background; if another prewarm is already running, this one will skip. The first query may still download the model if prewarm has not finished.");
+      } else {
+        notes.push("Local embeddings were configured, but background prewarm could not be started; the first query may download the local model.");
+      }
+    }
+
+    return {
+      platform: options.platform,
+      skills: platformInstall.skills,
+      hooks: platformInstall.hooks,
+      rules: platformInstall.rules,
+      hooksRequested: options.hooks,
+      embedding: options.embedding,
+      session: embedding.config.session,
+      configFile: embedding.configPath,
+      databasePath: init.database_path,
+      notes,
+    };
+  } finally {
+    service.close();
+  }
 }
 
 export function platformDisplayName(platform: InstallPlatform): string {

@@ -66,10 +66,10 @@ assert.equal(compactResult.valid, true, `compact edge must stay valid, got: ${JS
 
 const tmp = mkdtempSync(join(tmpdir(), "greplica-proposal-validate-test-"));
 const db = openDatabase(join(tmp, "graph.db"));
+const repository = new SqliteRepository(db);
+const service = new KnowledgeGraphService(repository);
 
 try {
-  const repository = new SqliteRepository(db);
-  const service = new KnowledgeGraphService(repository);
   const repoA = {
     repo_root: join(tmp, "repo-a"),
     repo_name: "repo-a",
@@ -154,8 +154,9 @@ try {
   assert.deepEqual(repoBGraph.components.map((component) => component.name), ["Repo B CLI"]);
   assert.equal(initializedB.repo_id === initializedA.repo_id, false, "test repos must be distinct");
 } finally {
-  db.close();
+  service.close();
 }
+assert.equal(db.open, false, "closing the knowledge graph service must close its SQLite connection");
 
 // Compact relationship fields must report malformed owner/target ids through
 // validation instead of throwing while generating an edge id.
