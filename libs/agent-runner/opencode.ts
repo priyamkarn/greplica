@@ -1,5 +1,6 @@
 import { createWriteStream, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { dirname, join } from "node:path";
 import { collectAgentMetrics } from "./metrics.js";
 import type { AgentRunInput, AgentRunResult } from "./types.js";
 
@@ -26,14 +27,28 @@ export async function runOpenCodeAgent(input: AgentRunInput): Promise<AgentRunRe
   };
 }
 
-function runOpenCodeProcess(
+export function runOpenCodeProcess(
   input: AgentRunInput,
   transcript: NodeJS.WritableStream,
+  spawnImpl: typeof spawn = spawn,
 ): Promise<{ exitCode: number | null; signal: string | null }> {
   return new Promise((resolve, reject) => {
-    const args = ["-p", input.prompt, "-f", "json", "-q"];
+    // The opencode CLI has no stdin/file option for its prompt argument -- only
+    // a literal `-p <text>` value -- and process arguments are visible to other
+    // local users via `ps`/`/proc/<pid>/cmdline` for as long as the process runs.
+    // input.prompt embeds the full session transcript (which may contain secrets
+    // or other sensitive content), so it must never be passed directly as argv.
+    // Instead, write it to a file inside the caller's private run directory
+    // (created via mkdtempSync, mode 0700 per POSIX) and pass only a short,
+    // non-sensitive reference on the command line; the agent reads the real
+    // instructions itself via its own file tool.
+    const promptPath = join(dirname(input.transcriptPath), "opencode-task-prompt.md");
+    writeFileSync(promptPath, input.prompt, "utf8");
+    const wrapperPrompt = `Your full task instructions are in the file at ${promptPath}. Read that file now and follow its instructions exactly.`;
 
-    const child = spawn("opencode", args, {
+    const args = ["-p", wrapperPrompt, "-f", "json", "-q"];
+
+    const child = spawnImpl("opencode", args, {
       cwd: input.cwd,
       env: input.env,
       stdio: ["ignore", "pipe", "inherit"],
