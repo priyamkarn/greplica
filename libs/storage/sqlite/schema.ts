@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS claims (
   intent TEXT NOT NULL,
   code_anchors TEXT,
   anchor_fingerprints TEXT,
+  retrieval_count INTEGER NOT NULL DEFAULT 0,
+  last_retrieved_at TEXT,
   PRIMARY KEY(repo_id, id)
 );
 

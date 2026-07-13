@@ -5,7 +5,7 @@ import { isatty } from "node:tty";
 import { basename, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { createLocalKnowledgeGraphService, KnowledgeGraphService } from "../../libs/knowledge-graph/service.js";
-import type { ClaimAnchorAuditResult, RepoRef } from "../../libs/knowledge-graph/service.js";
+import type { ClaimAnchorAuditResult, RelevanceAuditResult, RepoRef } from "../../libs/knowledge-graph/service.js";
 import { envVarSource, loadRepoEnv, type LoadedRepoEnv } from "../../libs/env/load-local-env.js";
 import {
   ensureGreplicaConfig,
@@ -106,6 +106,13 @@ const cliCommands = [
     path: ["graph", "audit", "anchors"],
     usage: "graph audit anchors",
     handler: withCommandContext(runGraphAuditAnchorsCommand),
+    showInTopLevelHelp: true,
+  },
+  {
+    key: "graphAuditRelevance",
+    path: ["graph", "audit", "relevance"],
+    usage: "graph audit relevance [--min-age-days <n>]",
+    handler: withCommandContext(runGraphAuditRelevanceCommand),
     showInTopLevelHelp: true,
   },
   {
@@ -282,6 +289,27 @@ async function runGraphAuditAnchorsCommand(_args: string[], getContext: CommandC
   if (anchorAuditIssueCount(result) > 0) process.exitCode = 1;
 }
 
+function runGraphAuditRelevanceCommand(args: string[], getContext: CommandContextProvider): void {
+  const minAgeDays = parseMinAgeDaysArg(args);
+  const { repo, service } = getContext();
+  const result = service.auditRelevance(repo, minAgeDays === undefined ? undefined : { minAgeDays });
+  printRelevanceAudit(result);
+  // Advisory only, unlike the anchor audit: an unretrieved claim may simply
+  // be rare, correct memory that hasn't come up yet. This never fails the
+  // command; it's a prompt for a human to look, not a build-breaking check.
+}
+
+function parseMinAgeDaysArg(args: string[]): number | undefined {
+  const index = args.indexOf("--min-age-days");
+  if (index === -1) return undefined;
+  const raw = args[index + 1];
+  const value = raw === undefined ? NaN : Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(usage("graphAuditRelevance"));
+  }
+  return value;
+}
+
 function runGraphExportCommand(args: string[], getContext: CommandContextProvider): void {
   const outputDir = requireFile(args[0], usage("graphExport"));
   const { repo, service } = getContext();
@@ -361,6 +389,25 @@ function printAnchorAudit(result: ClaimAnchorAuditResult): void {
   printAuditSection("Missing symbols", result.missing_symbols, (issue) => `${issue.claim_id} -> ${formatAuditAnchor(issue.anchor)}`);
   printAuditSection("Ambiguous symbols", result.ambiguous_symbols, (issue) => `${issue.claim_id} -> ${formatAuditAnchor(issue.anchor)}`);
   printAuditSection("Unsupported languages", result.unsupported_languages, (issue) => `${issue.claim_id} -> ${formatAuditAnchor(issue.anchor)}`);
+}
+
+function printRelevanceAudit(result: RelevanceAuditResult): void {
+  console.log("Relevance audit");
+  console.log("");
+  printAuditSection(
+    "Unsubstantiated, never retrieved (highest-confidence prune candidates)",
+    result.unsubstantiated_never_retrieved,
+    (issue) => `${issue.claim_id} (${formatAuditAgeDays(issue.age_days)}) -> ${issue.text}`,
+  );
+  printAuditSection(
+    "Substantiated, never retrieved (has an anchor or evidence; review before pruning)",
+    result.substantiated_never_retrieved,
+    (issue) => `${issue.claim_id} (${formatAuditAgeDays(issue.age_days)}) -> ${issue.text}`,
+  );
+}
+
+function formatAuditAgeDays(ageDays: number | null): string {
+  return ageDays === null ? "age unknown" : `${Math.floor(ageDays)}d old`;
 }
 
 function anchorAuditIssueCount(result: ClaimAnchorAuditResult): number {

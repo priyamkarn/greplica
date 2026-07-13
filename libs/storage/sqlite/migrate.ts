@@ -8,6 +8,7 @@ export function migrate(db: Database.Database): void {
   migrateGraphObjectTables(db);
   migrateSourceMemberships(db);
   migrateClaimAnchorFingerprints(db);
+  migrateClaimRetrievalStats(db);
 }
 
 function migrateReposTable(db: Database.Database): void {
@@ -342,6 +343,30 @@ function migrateClaimAnchorFingerprints(db: Database.Database): void {
   if (columns.some((column) => column.name === "anchor_fingerprints")) return;
   try {
     db.exec("ALTER TABLE claims ADD COLUMN anchor_fingerprints TEXT");
+  } catch (error: unknown) {
+    if (error instanceof Error && /duplicate column name/i.test(error.message)) return;
+    throw error;
+  }
+}
+
+// Tracks, per claim, how many times it has been returned by `graph context`
+// and when it was last returned. Used by the relevance audit to find claims
+// that have never once been useful to a future agent, instead of guessing
+// usefulness at proposal time. Nullable/zero-default: claims written before
+// this column exists start with no retrieval history, which is the correct
+// "never observed as retrieved" state, not an error condition.
+function migrateClaimRetrievalStats(db: Database.Database): void {
+  const columns = db.prepare("PRAGMA table_info(claims)").all() as Array<{ name: string }>;
+  const hasRetrievalCount = columns.some((column) => column.name === "retrieval_count");
+  const hasLastRetrievedAt = columns.some((column) => column.name === "last_retrieved_at");
+  if (hasRetrievalCount && hasLastRetrievedAt) return;
+  try {
+    if (!hasRetrievalCount) {
+      db.exec("ALTER TABLE claims ADD COLUMN retrieval_count INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!hasLastRetrievedAt) {
+      db.exec("ALTER TABLE claims ADD COLUMN last_retrieved_at TEXT");
+    }
   } catch (error: unknown) {
     if (error instanceof Error && /duplicate column name/i.test(error.message)) return;
     throw error;

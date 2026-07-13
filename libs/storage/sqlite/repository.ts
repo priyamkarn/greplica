@@ -79,6 +79,12 @@ export interface ClaimProvenanceRecord {
   memory_commit_id: string;
 }
 
+export interface ClaimRelevanceStats {
+  retrieval_count: number;
+  last_retrieved_at: string | null;
+  created_at: string | null;
+}
+
 export class SqliteRepository {
   constructor(private readonly db: Database.Database) {}
 
@@ -249,6 +255,60 @@ export class SqliteRepository {
       fingerprints.set(row.id, JSON.parse(row.anchor_fingerprints) as Record<string, string>);
     }
     return fingerprints;
+  }
+
+  // Records that `graph context` returned these claims to an agent. This is
+  // the only positive usefulness signal the system has: instead of guessing
+  // at proposal time whether a claim will matter later, the relevance audit
+  // later asks whether it actually got used.
+  recordClaimRetrievals(repoId: string, claimIds: string[], retrievedAt: string = new Date().toISOString()): void {
+    if (claimIds.length === 0) return;
+    const update = this.db.prepare(
+      `UPDATE claims
+       SET retrieval_count = retrieval_count + 1, last_retrieved_at = ?
+       WHERE repo_id = ? AND id = ?`,
+    );
+    const runAll = this.db.transaction((ids: string[]) => {
+      for (const id of ids) update.run(retrievedAt, repoId, id);
+    });
+    runAll(claimIds);
+  }
+
+  // Retrieval stats plus the earliest known creation time (from graph
+  // membership provenance) for each claim, keyed by claim id. Used by the
+  // relevance audit to find claims that are both old and never retrieved.
+  readClaimRelevanceStats(repoId: string, ids: string[]): Map<string, ClaimRelevanceStats> {
+    const stats = new Map<string, ClaimRelevanceStats>();
+    if (ids.length === 0) return stats;
+
+    const rows = this.db
+      .prepare(
+        `SELECT id, retrieval_count, last_retrieved_at
+         FROM claims
+         WHERE repo_id = ? AND id IN (${placeholders(ids)})`,
+      )
+      .all(repoId, ...ids) as Array<{ id: string; retrieval_count: number; last_retrieved_at: string | null }>;
+
+    const createdAtRows = this.db
+      .prepare(
+        `SELECT gm.subject_id AS claim_id, MIN(mc.created_at) AS created_at
+         FROM graph_memberships gm
+         JOIN memory_commits mc ON mc.id = gm.memory_commit_id
+         JOIN graph_scopes gs ON gs.id = gm.scope_id
+         WHERE gm.subject_type = 'claim' AND gs.repo_id = ? AND gm.subject_id IN (${placeholders(ids)})
+         GROUP BY gm.subject_id`,
+      )
+      .all(repoId, ...ids) as Array<{ claim_id: string; created_at: string | null }>;
+    const createdAtByClaim = new Map(createdAtRows.map((row) => [row.claim_id, row.created_at]));
+
+    for (const row of rows) {
+      stats.set(row.id, {
+        retrieval_count: row.retrieval_count,
+        last_retrieved_at: row.last_retrieved_at,
+        created_at: createdAtByClaim.get(row.id) ?? null,
+      });
+    }
+    return stats;
   }
 
   readGraphView(repoId: string): {

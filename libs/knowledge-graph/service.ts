@@ -18,9 +18,11 @@ import { bufferToFloat32Array } from "./graph-context/vector.js";
 import { createEmbedder } from "./graph-context/embedder.js";
 import { buildClaimDocuments } from "./graph-context/documents.js";
 import { findSimilarClaims, type SimilarClaimMatch } from "./dedupe/find-similar-claims.js";
+import { auditClaimRelevance, type RelevanceAuditResult } from "./relevance-audit.js";
 
 export type { GraphContextResult } from "./graph-context/types.js";
 export type { ClaimAnchorAuditResult } from "./code-anchors/types.js";
+export type { RelevanceAuditResult } from "./relevance-audit.js";
 
 export interface RepoRef {
   repo_root?: string;
@@ -127,11 +129,24 @@ export class KnowledgeGraphService {
 
   async contextGraph(input: RepoRef, query: string): Promise<GraphContextResult> {
     const initialized = this.requireRepo(input);
-    return this.contextBuilder.build(initialized.repo_id, this.repository.readGraphView(initialized.repo_id), query, {
-      config: this.contextConfig,
-      warnOnCreatedEmbeddings: true,
-      repoRoot: input.repo_root,
-    });
+    const result = await this.contextBuilder.build(
+      initialized.repo_id,
+      this.repository.readGraphView(initialized.repo_id),
+      query,
+      {
+        config: this.contextConfig,
+        warnOnCreatedEmbeddings: true,
+        repoRoot: input.repo_root,
+      },
+    );
+    // Usefulness can't be judged at write time, only at read time: this is
+    // the one place the system observes a claim actually being useful to an
+    // agent, so the relevance audit has real evidence instead of a guess.
+    this.repository.recordClaimRetrievals(
+      initialized.repo_id,
+      result.claims.map((claim) => claim.object.id),
+    );
+    return result;
   }
 
   async auditCodeAnchors(input: RepoRef): Promise<ClaimAnchorAuditResult> {
@@ -142,6 +157,16 @@ export class KnowledgeGraphService {
       claims.map((claim) => claim.id),
     );
     return auditClaimCodeAnchors(input.repo_root, claims, new CodeAnchorResolver(), baselineFingerprints);
+  }
+
+  auditRelevance(input: RepoRef, options?: { minAgeDays?: number }): RelevanceAuditResult {
+    const initialized = this.requireRepo(input);
+    const graph = this.repository.readGraphView(initialized.repo_id);
+    const stats = this.repository.readClaimRelevanceStats(
+      initialized.repo_id,
+      graph.claims.map((claim) => claim.id),
+    );
+    return auditClaimRelevance(graph.claims, graph.edges, stats, options);
   }
 
   async validateProposal(input: RepoRef, proposal: unknown): Promise<ProposalReviewResult> {

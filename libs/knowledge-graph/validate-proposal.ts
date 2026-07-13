@@ -73,6 +73,15 @@ export function validateProposal(
     if (!isNonEmptyString(flow.name)) errors.push(`Flow ${stringId(flow.id)} needs a name.`);
   }
 
+  const claimIdsWithEvidence = new Set(
+    edges
+      .filter(
+        (edge): edge is Record<string, unknown> =>
+          isRecord(edge) && edge.kind === "evidenced_by" && edge.from_type === "claim" && isNonEmptyString(edge.from_id),
+      )
+      .map((edge) => String(edge.from_id)),
+  );
+
   for (const claim of claims) {
     if (!isRecord(claim)) {
       errors.push("Every claim must be an object.");
@@ -84,6 +93,7 @@ export function validateProposal(
     if (!claimTruths.has(String(claim.truth))) errors.push(`Claim ${stringId(claim.id)} has invalid truth.`);
     if (!claimIntents.has(String(claim.intent))) errors.push(`Claim ${stringId(claim.id)} has invalid intent.`);
     validateClaimCodeAnchors(claim, errors);
+    validateClaimIsSubstantiated(claim, claimIdsWithEvidence, errors);
   }
 
   for (const source of sources) {
@@ -211,6 +221,31 @@ function validateClaimCodeAnchors(claim: Record<string, unknown>, errors: string
     }
     seen.add(key);
   }
+}
+
+// A claim with truth "unknown" that isn't tracking a task/question, and has
+// neither a code anchor nor an evidenced_by edge, has nothing tying it to a
+// verifiable source. This is exactly the "claims based only on vague
+// conversation" case the memory-update instructions ask the agent not to
+// store; enforcing it here means a sloppy or truncated agent run can't
+// silently skip that judgment call.
+function validateClaimIsSubstantiated(
+  claim: Record<string, unknown>,
+  claimIdsWithEvidence: Set<string>,
+  errors: string[],
+): void {
+  if (claim.truth !== "unknown") return;
+  if (claim.kind === "task" || claim.kind === "question") return;
+
+  const anchors = claim.code_anchors;
+  const hasAnchors = Array.isArray(anchors) && anchors.length > 0;
+  const hasEvidence = isNonEmptyString(claim.id) && claimIdsWithEvidence.has(claim.id);
+  if (hasAnchors || hasEvidence) return;
+
+  errors.push(
+    `Claim ${stringId(claim.id)} has truth "unknown" and kind "${String(claim.kind)}" but no code_anchors and no evidenced_by edge: ` +
+      "either attach evidence, add anchors, mark it code_verified/source_verified, or use kind 'task'/'question' for genuinely unresolved items.",
+  );
 }
 
 function isAbsoluteOrLineAnchor(file: string): boolean {
