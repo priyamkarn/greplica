@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { spawn } from "node:child_process";
+import spawn from "cross-spawn";
 import { collectAgentMetrics } from "./metrics.js";
 import type { AgentRunInput, AgentRunResult } from "./types.js";
 
@@ -57,11 +57,11 @@ function runCodexProcess(
     );
 
     child.once("error", reject);
-    child.stdout.pipe(transcript);
+    child.stdout!.pipe(transcript);
     // If the child exits before draining the prompt, stdin emits EPIPE;
     // the failure is reported via the exit code on "close".
-    child.stdin.once("error", () => {});
-    child.stdin.end(input.prompt);
+    child.stdin!.once("error", () => {});
+    child.stdin!.end(input.prompt);
     child.once("close", (exitCode, signal) => {
       resolve({ exitCode, signal });
     });

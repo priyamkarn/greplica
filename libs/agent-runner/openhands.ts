@@ -1,5 +1,5 @@
 import { createWriteStream, writeFileSync } from "node:fs";
-import { spawn } from "node:child_process";
+import spawn from "cross-spawn";
 import { dirname, join } from "node:path";
 import { collectAgentMetrics } from "./metrics.js";
 import type { AgentRunInput, AgentRunResult } from "./types.js";
@@ -49,7 +49,7 @@ function runOpenHandsProcess(
     );
 
     child.once("error", reject);
-    child.stdout.pipe(transcript);
+    child.stdout!.pipe(transcript);
     child.once("close", (exitCode, signal) => {
       writeFileSync(
         input.finalMessagePath,

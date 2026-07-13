@@ -1,5 +1,5 @@
 import { createWriteStream, writeFileSync } from "node:fs";
-import { spawn } from "node:child_process";
+import spawn from "cross-spawn";
 import { collectAgentMetrics } from "./metrics.js";
 import type { AgentRunInput, AgentRunResult } from "./types.js";
 
@@ -26,21 +26,22 @@ export async function runOpenCodeAgent(input: AgentRunInput): Promise<AgentRunRe
   };
 }
 
-function runOpenCodeProcess(
+export function runOpenCodeProcess(
   input: AgentRunInput,
   transcript: NodeJS.WritableStream,
+  spawnImpl: typeof spawn = spawn,
 ): Promise<{ exitCode: number | null; signal: string | null }> {
   return new Promise((resolve, reject) => {
     const args = ["-p", input.prompt, "-f", "json", "-q"];
 
-    const child = spawn("opencode", args, {
+    const child = spawnImpl("opencode", args, {
       cwd: input.cwd,
       env: input.env,
       stdio: ["ignore", "pipe", "inherit"],
     });
 
     child.once("error", reject);
-    child.stdout.pipe(transcript);
+    child.stdout!.pipe(transcript);
     child.once("close", (exitCode, signal) => {
       writeFileSync(
         input.finalMessagePath,
