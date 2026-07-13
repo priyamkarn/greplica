@@ -39,7 +39,10 @@ function runOpenCodeProcess(
       stdio: ["ignore", "pipe", "inherit"],
     });
 
-    child.once("error", reject);
+    child.once("error", (error) => {
+      transcript.end();
+      reject(error);
+    });
     child.stdout.pipe(transcript);
     child.once("close", (exitCode, signal) => {
       writeFileSync(
